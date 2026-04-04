@@ -123,6 +123,34 @@ describe('FlagEvaluatorService', () => {
   });
 
   describe('override priority', () => {
+    it('should skip user override when tenantId does not match', () => {
+      // override scoped to a specific tenantId — different tenant should not match
+      const flag = makeFlag({
+        enabled: false,
+        overrides: [makeOverride({ userId: 'user-1', tenantId: 'tenant-1', enabled: true })],
+      });
+      const result = evaluator.evaluate(flag, { userId: 'user-1', tenantId: 'tenant-2' });
+      expect(result.result).toBe(false);
+    });
+
+    it('should skip user override when environment does not match', () => {
+      const flag = makeFlag({
+        enabled: false,
+        overrides: [makeOverride({ userId: 'user-1', environment: 'staging', enabled: true })],
+      });
+      const result = evaluator.evaluate(flag, { userId: 'user-1', environment: 'production' });
+      expect(result.result).toBe(false);
+    });
+
+    it('should skip tenant override when environment does not match', () => {
+      const flag = makeFlag({
+        enabled: false,
+        overrides: [makeOverride({ tenantId: 'tenant-1', environment: 'staging', enabled: true })],
+      });
+      const result = evaluator.evaluate(flag, { tenantId: 'tenant-1', environment: 'production' });
+      expect(result.result).toBe(false);
+    });
+
     it('should prioritize user override over tenant override', () => {
       const flag = makeFlag({
         overrides: [

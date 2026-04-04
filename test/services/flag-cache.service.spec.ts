@@ -52,6 +52,25 @@ describe('FlagCacheService', () => {
     expect(noCache.get('MY_FLAG')).toBeNull();
   });
 
+  it('should use default TTL of 30s when cacheTtlMs is not specified', () => {
+    jest.useFakeTimers();
+
+    const defaultCache = new FlagCacheService({ environment: 'test' });
+    const flag = makeFlagData('FLAG');
+    defaultCache.set('FLAG', flag);
+    expect(defaultCache.get('FLAG')).toEqual(flag);
+
+    defaultCache.setAll([flag]);
+    expect(defaultCache.getAll()).toEqual([flag]);
+
+    // advance past the 30s default TTL
+    jest.advanceTimersByTime(30_001);
+    expect(defaultCache.get('FLAG')).toBeNull();
+    expect(defaultCache.getAll()).toBeNull();
+
+    jest.useRealTimers();
+  });
+
   it('should invalidate a specific key', () => {
     cache.set('A', makeFlagData('A'));
     cache.set('B', makeFlagData('B'));
@@ -82,5 +101,24 @@ describe('FlagCacheService', () => {
     cache.setAll([makeFlagData('A')]);
     cache.invalidate();
     expect(cache.getAll()).toBeNull();
+  });
+
+  it('should return null for all-flags cache after TTL expires', () => {
+    jest.useFakeTimers();
+
+    const flags = [makeFlagData('A'), makeFlagData('B')];
+    cache.setAll(flags);
+    expect(cache.getAll()).toEqual(flags);
+
+    jest.advanceTimersByTime(5001);
+    expect(cache.getAll()).toBeNull();
+
+    jest.useRealTimers();
+  });
+
+  it('should not cache all flags when cacheTtlMs is 0', () => {
+    const noCache = new FlagCacheService({ cacheTtlMs: 0, environment: 'test' });
+    noCache.setAll([makeFlagData('A')]);
+    expect(noCache.getAll()).toBeNull();
   });
 });

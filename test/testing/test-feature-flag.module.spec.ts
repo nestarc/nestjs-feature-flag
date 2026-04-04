@@ -43,4 +43,19 @@ describe('TestFeatureFlagModule', () => {
     const service = module.get(FeatureFlagService);
     expect(await service.isEnabled('ANY')).toBe(false);
   });
+
+  it('should expose mock create, update, archive, setOverride, findAll, invalidateCache', async () => {
+    const module = await Test.createTestingModule({
+      imports: [TestFeatureFlagModule.register({ FEATURE_A: true })],
+    }).compile();
+
+    const service = module.get(FeatureFlagService);
+
+    await expect(service.create({ key: 'X' } as any)).resolves.toEqual({});
+    await expect(service.update('X', {} as any)).resolves.toEqual({});
+    await expect(service.archive('X')).resolves.toEqual({});
+    await expect(service.setOverride('X', {} as any)).resolves.toBeUndefined();
+    await expect(service.findAll()).resolves.toEqual([]);
+    expect(() => service.invalidateCache()).not.toThrow();
+  });
 });

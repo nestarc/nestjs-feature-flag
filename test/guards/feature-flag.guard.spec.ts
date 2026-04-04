@@ -121,4 +121,26 @@ describe('FeatureFlagGuard', () => {
     expect(result).toBe(true);
     expect(mockService.isEnabled).toHaveBeenCalledWith('CLASS_FLAG');
   });
+
+  it('should use class-level options when handler options are absent', async () => {
+    const handler = () => {};
+    const classRef = class TestController {};
+
+    jest.spyOn(reflector, 'get').mockImplementation((key: unknown, target: unknown) => {
+      if (key === FEATURE_FLAG_KEY) return 'MY_FLAG';
+      if (key === BYPASS_FEATURE_FLAG_KEY) return undefined;
+      if (key === FEATURE_FLAG_OPTIONS_KEY && target === handler) return undefined;
+      if (key === FEATURE_FLAG_OPTIONS_KEY && target === classRef) return { statusCode: 404, fallback: { message: 'Not found' } };
+      return undefined;
+    });
+    (mockService.isEnabled as jest.Mock).mockResolvedValue(false);
+
+    const ctx = createMockContext(handler, classRef);
+    try {
+      await guard.canActivate(ctx);
+      fail('Expected HttpException');
+    } catch (e: any) {
+      expect(e.getStatus()).toBe(404);
+    }
+  });
 });
