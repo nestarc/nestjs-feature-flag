@@ -1,0 +1,106 @@
+import {
+  DynamicModule,
+  MiddlewareConsumer,
+  Module,
+  NestModule,
+  Provider,
+  RequestMethod,
+} from '@nestjs/common';
+import { FEATURE_FLAG_MODULE_OPTIONS } from './feature-flag.constants';
+import {
+  FeatureFlagModuleAsyncOptions,
+  FeatureFlagModuleOptions,
+} from './interfaces/feature-flag-options.interface';
+import { FeatureFlagService } from './services/feature-flag.service';
+import { FlagCacheService } from './services/flag-cache.service';
+import { FlagEvaluatorService } from './services/flag-evaluator.service';
+import { FlagContext } from './services/flag-context';
+import { FeatureFlagGuard } from './guards/feature-flag.guard';
+import { FlagContextMiddleware } from './middleware/flag-context.middleware';
+
+export interface FeatureFlagModuleRootOptions extends FeatureFlagModuleOptions {
+  prisma: any;
+}
+
+export interface FeatureFlagModuleRootAsyncOptions extends FeatureFlagModuleAsyncOptions {
+  useFactory?: (
+    ...args: any[]
+  ) => Promise<FeatureFlagModuleRootOptions> | FeatureFlagModuleRootOptions;
+}
+
+const coreProviders: Provider[] = [
+  FlagCacheService,
+  FlagEvaluatorService,
+  FlagContext,
+  FeatureFlagGuard,
+  FeatureFlagService,
+];
+
+@Module({})
+export class FeatureFlagModule implements NestModule {
+  configure(consumer: MiddlewareConsumer): void {
+    consumer
+      .apply(FlagContextMiddleware)
+      .forRoutes({ path: '(.*)', method: RequestMethod.ALL });
+  }
+
+  static forRoot(options: FeatureFlagModuleRootOptions): DynamicModule {
+    const { prisma, ...moduleOptions } = options;
+
+    return {
+      module: FeatureFlagModule,
+      global: true,
+      providers: [
+        { provide: FEATURE_FLAG_MODULE_OPTIONS, useValue: moduleOptions },
+        { provide: 'PRISMA_SERVICE', useValue: prisma },
+        { provide: 'EVENT_EMITTER', useValue: null },
+        ...coreProviders,
+      ],
+      exports: [FeatureFlagService, FlagContext, FEATURE_FLAG_MODULE_OPTIONS],
+    };
+  }
+
+  static forRootAsync(options: FeatureFlagModuleRootAsyncOptions): DynamicModule {
+    const asyncProviders = this.createAsyncProviders(options);
+
+    return {
+      module: FeatureFlagModule,
+      global: true,
+      imports: options.imports ?? [],
+      providers: [
+        ...asyncProviders,
+        { provide: 'EVENT_EMITTER', useValue: null },
+        ...coreProviders,
+      ],
+      exports: [FeatureFlagService, FlagContext, FEATURE_FLAG_MODULE_OPTIONS],
+    };
+  }
+
+  private static createAsyncProviders(
+    options: FeatureFlagModuleRootAsyncOptions,
+  ): Provider[] {
+    if (options.useFactory) {
+      return [
+        {
+          provide: FEATURE_FLAG_MODULE_OPTIONS,
+          useFactory: async (...args: any[]) => {
+            const result = await options.useFactory!(...args);
+            const { prisma: _prisma, ...moduleOptions } = result;
+            return moduleOptions;
+          },
+          inject: options.inject ?? [],
+        },
+        {
+          provide: 'PRISMA_SERVICE',
+          useFactory: async (...args: any[]) => {
+            const result = await options.useFactory!(...args);
+            return result.prisma;
+          },
+          inject: options.inject ?? [],
+        },
+      ];
+    }
+
+    return [];
+  }
+}
