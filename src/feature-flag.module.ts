@@ -50,13 +50,27 @@ export class FeatureFlagModule implements NestModule {
   static forRoot(options: FeatureFlagModuleRootOptions): DynamicModule {
     const { prisma, ...moduleOptions } = options;
 
+    const eventProvider: Provider = options.emitEvents
+      ? {
+          provide: 'EVENT_EMITTER',
+          useFactory: () => {
+            try {
+              const { EventEmitter2 } = require('@nestjs/event-emitter');
+              return new EventEmitter2();
+            } catch {
+              return null;
+            }
+          },
+        }
+      : { provide: 'EVENT_EMITTER', useValue: null };
+
     return {
       module: FeatureFlagModule,
       global: true,
       providers: [
         { provide: FEATURE_FLAG_MODULE_OPTIONS, useValue: moduleOptions },
         { provide: 'PRISMA_SERVICE', useValue: prisma },
-        { provide: 'EVENT_EMITTER', useValue: null },
+        eventProvider,
         ...coreProviders,
       ],
       exports: [FeatureFlagService, FlagContext, FEATURE_FLAG_MODULE_OPTIONS],
@@ -85,7 +99,19 @@ export class FeatureFlagModule implements NestModule {
           useFactory: (full: FeatureFlagModuleRootOptions) => full.prisma,
           inject: [FULL_OPTIONS],
         },
-        { provide: 'EVENT_EMITTER', useValue: null },
+        {
+          provide: 'EVENT_EMITTER',
+          useFactory: (full: FeatureFlagModuleRootOptions) => {
+            if (!full.emitEvents) return null;
+            try {
+              const { EventEmitter2 } = require('@nestjs/event-emitter');
+              return new EventEmitter2();
+            } catch {
+              return null;
+            }
+          },
+          inject: [FULL_OPTIONS],
+        },
         ...coreProviders,
       ],
       exports: [FeatureFlagService, FlagContext, FEATURE_FLAG_MODULE_OPTIONS],

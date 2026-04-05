@@ -99,6 +99,41 @@ describe('FeatureFlagModule', () => {
     });
   });
 
+  describe('forRoot with emitEvents', () => {
+    it('should provide a real EventEmitter2 when emitEvents is true', async () => {
+      const { EventEmitterModule } = await import('@nestjs/event-emitter');
+
+      const module = await Test.createTestingModule({
+        imports: [
+          EventEmitterModule.forRoot(),
+          FeatureFlagModule.forRoot({
+            environment: 'test',
+            prisma: mockPrisma,
+            emitEvents: true,
+          }),
+        ],
+      }).compile();
+
+      const emitter = module.get('EVENT_EMITTER');
+      expect(emitter).not.toBeNull();
+      expect(emitter.emit).toBeDefined();
+    });
+
+    it('should provide null EVENT_EMITTER when emitEvents is false', async () => {
+      const module = await Test.createTestingModule({
+        imports: [
+          FeatureFlagModule.forRoot({
+            environment: 'test',
+            prisma: mockPrisma,
+          }),
+        ],
+      }).compile();
+
+      const emitter = module.get('EVENT_EMITTER');
+      expect(emitter).toBeNull();
+    });
+  });
+
   describe('forRootAsync factory should only be called once', () => {
     it('should invoke the factory exactly once', async () => {
       const factory = jest.fn().mockReturnValue({
