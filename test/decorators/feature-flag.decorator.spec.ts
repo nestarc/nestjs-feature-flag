@@ -1,5 +1,7 @@
+import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { FEATURE_FLAG_KEY, FEATURE_FLAG_OPTIONS_KEY } from '../../src/feature-flag.constants';
 import { FeatureFlag } from '../../src/decorators/feature-flag.decorator';
+import { FeatureFlagGuard } from '../../src/guards/feature-flag.guard';
 
 describe('@FeatureFlag', () => {
   it('should set flag key metadata on a method', () => {
@@ -38,5 +40,25 @@ describe('@FeatureFlag', () => {
 
     const options = Reflect.getMetadata(FEATURE_FLAG_OPTIONS_KEY, TestController.prototype.handler);
     expect(options).toEqual({});
+  });
+
+  it('should apply FeatureFlagGuard via UseGuards', () => {
+    class TestController {
+      @FeatureFlag('MY_FLAG')
+      handler() {}
+    }
+
+    const guards = Reflect.getMetadata(GUARDS_METADATA, TestController.prototype.handler);
+    expect(guards).toBeDefined();
+    expect(guards).toContain(FeatureFlagGuard);
+  });
+
+  it('should apply FeatureFlagGuard at class level', () => {
+    @FeatureFlag('MODULE_FLAG')
+    class TestController {}
+
+    const guards = Reflect.getMetadata(GUARDS_METADATA, TestController);
+    expect(guards).toBeDefined();
+    expect(guards).toContain(FeatureFlagGuard);
   });
 });
