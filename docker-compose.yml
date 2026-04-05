@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - '5499:5432'
+    environment:
+      POSTGRES_DB: feature_flag_test
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD', 'pg_isready', '-U', 'test', '-d', 'feature_flag_test']
+      interval: 2s
+      timeout: 5s
+      retries: 10
