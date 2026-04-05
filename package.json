@@ -32,6 +32,10 @@
     "pretest:e2e": "npm run docker:up && npm run db:migrate",
     "test:e2e": "dotenv -e .env.test -- jest --config jest.e2e.config.ts --runInBand"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nestarc/nestjs-feature-flag"
+  },
   "keywords": [
     "nestjs",
     "feature-flag",
