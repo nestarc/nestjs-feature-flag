@@ -4,7 +4,7 @@ import { FeatureFlagGuard } from '../../src/guards/feature-flag.guard';
 import { FeatureFlagService } from '../../src/services/feature-flag.service';
 import { FEATURE_FLAG_KEY, FEATURE_FLAG_OPTIONS_KEY, BYPASS_FEATURE_FLAG_KEY } from '../../src/feature-flag.constants';
 
-function createMockContext(handler: Function, classRef: Function = class {}): ExecutionContext {
+function createMockContext(handler: () => void, classRef: new (...args: any[]) => any = class {}): ExecutionContext {
   return {
     getHandler: () => handler,
     getClass: () => classRef,

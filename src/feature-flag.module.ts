@@ -88,10 +88,8 @@ export class FeatureFlagModule implements NestModule {
         ...asyncProviders,
         {
           provide: FEATURE_FLAG_MODULE_OPTIONS,
-          useFactory: (full: FeatureFlagModuleRootOptions) => {
-            const { prisma: _, ...moduleOptions } = full;
-            return moduleOptions;
-          },
+          useFactory: ({ prisma: _, ...moduleOptions }: FeatureFlagModuleRootOptions) =>
+            moduleOptions,
           inject: [FULL_OPTIONS],
         },
         {
