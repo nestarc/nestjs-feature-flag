@@ -6,6 +6,7 @@ import {
   Provider,
   RequestMethod,
 } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { FEATURE_FLAG_MODULE_OPTIONS } from './feature-flag.constants';
 import {
   FeatureFlagModuleAsyncOptions,
@@ -50,19 +51,15 @@ export class FeatureFlagModule implements NestModule {
   static forRoot(options: FeatureFlagModuleRootOptions): DynamicModule {
     const { prisma, ...moduleOptions } = options;
 
-    const eventProvider: Provider = options.emitEvents
-      ? {
-          provide: 'EVENT_EMITTER',
-          useFactory: () => {
-            try {
-              const { EventEmitter2 } = require('@nestjs/event-emitter');
-              return new EventEmitter2();
-            } catch {
-              return null;
-            }
-          },
-        }
-      : { provide: 'EVENT_EMITTER', useValue: null };
+    let eventProvider: Provider = { provide: 'EVENT_EMITTER', useValue: null };
+    if (options.emitEvents) {
+      try {
+        const { EventEmitter2 } = require('@nestjs/event-emitter');
+        eventProvider = { provide: 'EVENT_EMITTER', useExisting: EventEmitter2 };
+      } catch {
+        /* @nestjs/event-emitter not installed */
+      }
+    }
 
     return {
       module: FeatureFlagModule,
@@ -99,16 +96,16 @@ export class FeatureFlagModule implements NestModule {
         },
         {
           provide: 'EVENT_EMITTER',
-          useFactory: (full: FeatureFlagModuleRootOptions) => {
+          useFactory: (full: FeatureFlagModuleRootOptions, moduleRef: ModuleRef) => {
             if (!full.emitEvents) return null;
             try {
               const { EventEmitter2 } = require('@nestjs/event-emitter');
-              return new EventEmitter2();
+              return moduleRef.get(EventEmitter2, { strict: false });
             } catch {
               return null;
             }
           },
-          inject: [FULL_OPTIONS],
+          inject: [FULL_OPTIONS, ModuleRef],
         },
         ...coreProviders,
       ],

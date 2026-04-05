@@ -100,8 +100,8 @@ describe('FeatureFlagModule', () => {
   });
 
   describe('forRoot with emitEvents', () => {
-    it('should provide a real EventEmitter2 when emitEvents is true', async () => {
-      const { EventEmitterModule } = await import('@nestjs/event-emitter');
+    it('should share the same EventEmitter2 instance that NestJS manages', async () => {
+      const { EventEmitterModule, EventEmitter2 } = await import('@nestjs/event-emitter');
 
       const module = await Test.createTestingModule({
         imports: [
@@ -115,8 +115,9 @@ describe('FeatureFlagModule', () => {
       }).compile();
 
       const emitter = module.get('EVENT_EMITTER');
+      const nestEmitter = module.get(EventEmitter2);
       expect(emitter).not.toBeNull();
-      expect(emitter.emit).toBeDefined();
+      expect(emitter).toBe(nestEmitter);
     });
 
     it('should provide null EVENT_EMITTER when emitEvents is false', async () => {

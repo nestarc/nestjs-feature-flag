@@ -128,6 +128,24 @@ describe('FeatureFlagService', () => {
       expect(result).toBe(true);
     });
 
+    it('should use explicit null userId to override ambient context', async () => {
+      // Flag with a user override
+      const flag = makeFlagRecord('MY_FLAG', {
+        overrides: [{
+          id: 'o1', flagId: 'uuid-1', tenantId: null,
+          userId: 'ambient-user', environment: null, enabled: true,
+        }],
+      });
+      mockPrisma.featureFlag.findUnique.mockResolvedValue(flag);
+
+      // Set ambient user via FlagContext
+      const result = await context.run({ userId: 'ambient-user' }, () =>
+        service.isEnabled('MY_FLAG', { userId: null }),
+      );
+      // Explicit null should suppress the ambient userId, so user override won't match
+      expect(result).toBe(false);
+    });
+
     it('should inject environment from module options', async () => {
       const flag = makeFlagRecord('MY_FLAG', {
         overrides: [{

@@ -205,9 +205,9 @@ export class FeatureFlagService {
 
   private buildContext(explicit?: EvaluationContext): EvaluationContext {
     return {
-      userId: explicit?.userId ?? this.flagContext.getUserId(),
-      tenantId: explicit?.tenantId ?? this.getTenantId(),
-      environment: explicit?.environment ?? this.options.environment,
+      userId: explicit?.userId !== undefined ? explicit.userId : this.flagContext.getUserId(),
+      tenantId: explicit?.tenantId !== undefined ? explicit.tenantId : this.getTenantId(),
+      environment: explicit?.environment !== undefined ? explicit.environment : this.options.environment,
     };
   }
 
