@@ -121,7 +121,7 @@ CREATE UNIQUE INDEX uq_override_111
   WHERE tenant_id IS NOT NULL AND user_id IS NOT NULL AND environment IS NOT NULL;
 ```
 
-This file is included in the package at `prisma/migrations/0001_fix_override_unique_index.sql`.
+This SQL is included in the initial migration at `prisma/migrations/20260405000000_init/migration.sql`.
 
 ## Module Registration
 
@@ -315,6 +315,13 @@ const enabled = await this.flags.isEnabled('MY_FLAG', {
 });
 ```
 
+Passing `null` explicitly clears that dimension, suppressing any ambient value from the request context:
+
+```typescript
+// Evaluate as if no user is present, even within a request with x-user-id
+const globalResult = await this.flags.isEnabled('MY_FLAG', { userId: null });
+```
+
 ## Overrides
 
 Set context-specific overrides that take precedence over the global flag value:
@@ -351,6 +358,8 @@ await this.flags.setOverride('MY_FLAG', {
 
 Enable event emission to observe flag lifecycle changes. Requires `@nestjs/event-emitter` as an optional peer dependency.
 
+**Important:** You must import `EventEmitterModule.forRoot()` in your app module. The feature-flag module reuses the same `EventEmitter2` singleton that NestJS manages, so `@OnEvent()` listeners work out of the box.
+
 ### Setup
 
 ```typescript
@@ -358,11 +367,11 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
 
 @Module({
   imports: [
-    EventEmitterModule.forRoot(),
+    EventEmitterModule.forRoot(),   // must be imported
     FeatureFlagModule.forRoot({
       environment: 'production',
       prisma: prismaService,
-      emitEvents: true,  // enable events
+      emitEvents: true,
     }),
   ],
 })
