@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: feature_flag_test
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test -d feature_flag_test"
+          --health-interval 3s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://test:test@localhost:5432/feature_flag_test?schema=public
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test -- --runInBand --coverage
+
+      - name: Apply migrations
+        run: npx prisma migrate deploy
+
+      - name: E2E tests
+        run: npx jest --config jest.e2e.config.ts --runInBand
+
+      - name: Build
+        run: npm run build
