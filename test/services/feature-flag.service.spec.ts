@@ -47,6 +47,9 @@ describe('FeatureFlagService', () => {
       featureFlagOverride: {
         upsert: jest.fn(),
         deleteMany: jest.fn(),
+        findFirst: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
       },
     };
 
@@ -199,20 +202,84 @@ describe('FeatureFlagService', () => {
 
   describe('setOverride', () => {
     it('should upsert a tenant override', async () => {
-      const override = {
-        id: 'o1', flagId: 'uuid-1', tenantId: 'tenant-1',
-        userId: null, environment: null, enabled: true,
-        createdAt: new Date(), updatedAt: new Date(),
-      };
       mockPrisma.featureFlag.findUnique.mockResolvedValue(makeFlagRecord('MY_FLAG'));
-      mockPrisma.featureFlagOverride.upsert.mockResolvedValue(override);
+      mockPrisma.featureFlagOverride.findFirst.mockResolvedValue(null);
+      mockPrisma.featureFlagOverride.create.mockResolvedValue({
+        id: 'o1',
+        flagId: 'uuid-1',
+        tenantId: 'tenant-1',
+        userId: null,
+        environment: null,
+        enabled: true,
+      });
 
       await service.setOverride('MY_FLAG', {
         tenantId: 'tenant-1',
         enabled: true,
       });
 
-      expect(mockPrisma.featureFlagOverride.upsert).toHaveBeenCalled();
+      expect(mockPrisma.featureFlagOverride.findFirst).toHaveBeenCalled();
+      expect(mockPrisma.featureFlagOverride.create).toHaveBeenCalled();
+    });
+
+    it('should update existing override instead of creating a duplicate', async () => {
+      const existingOverride = {
+        id: 'existing-1',
+        flagId: 'uuid-1',
+        tenantId: null,
+        userId: null,
+        environment: null,
+        enabled: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      mockPrisma.featureFlag.findUnique.mockResolvedValue(makeFlagRecord('MY_FLAG'));
+      mockPrisma.featureFlagOverride.findFirst.mockResolvedValue(existingOverride);
+      mockPrisma.featureFlagOverride.update.mockResolvedValue({
+        ...existingOverride,
+        enabled: true,
+      });
+
+      await service.setOverride('MY_FLAG', { enabled: true });
+
+      expect(mockPrisma.featureFlagOverride.findFirst).toHaveBeenCalledWith({
+        where: {
+          flagId: 'uuid-1',
+          tenantId: null,
+          userId: null,
+          environment: null,
+        },
+      });
+      expect(mockPrisma.featureFlagOverride.update).toHaveBeenCalledWith({
+        where: { id: 'existing-1' },
+        data: { enabled: true },
+      });
+    });
+
+    it('should create a new override when none exists', async () => {
+      mockPrisma.featureFlag.findUnique.mockResolvedValue(makeFlagRecord('MY_FLAG'));
+      mockPrisma.featureFlagOverride.findFirst.mockResolvedValue(null);
+      mockPrisma.featureFlagOverride.create.mockResolvedValue({
+        id: 'new-1',
+        flagId: 'uuid-1',
+        tenantId: 'tenant-1',
+        userId: null,
+        environment: null,
+        enabled: true,
+      });
+
+      await service.setOverride('MY_FLAG', { tenantId: 'tenant-1', enabled: true });
+
+      expect(mockPrisma.featureFlagOverride.create).toHaveBeenCalledWith({
+        data: {
+          flagId: 'uuid-1',
+          tenantId: 'tenant-1',
+          userId: null,
+          environment: null,
+          enabled: true,
+        },
+      });
     });
   });
 
@@ -305,7 +372,8 @@ describe('FeatureFlagService', () => {
 
     it('should emit OVERRIDE_SET event on setOverride', async () => {
       mockPrisma.featureFlag.findUnique.mockResolvedValue(makeFlagRecord('MY_FLAG'));
-      mockPrisma.featureFlagOverride.upsert.mockResolvedValue({});
+      mockPrisma.featureFlagOverride.findFirst.mockResolvedValue(null);
+      mockPrisma.featureFlagOverride.create.mockResolvedValue({});
 
       await serviceWithEvents.setOverride('MY_FLAG', { tenantId: 'tenant-1', enabled: true });
       expect(mockEventEmitter.emit).toHaveBeenCalledWith(

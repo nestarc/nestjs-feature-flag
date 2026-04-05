@@ -127,24 +127,25 @@ export class FeatureFlagService {
       throw new Error(`Feature flag "${key}" not found`);
     }
 
-    await this.prisma.featureFlagOverride.upsert({
-      where: {
-        uq_override_context: {
-          flagId: flag.id,
-          tenantId: input.tenantId ?? null,
-          userId: input.userId ?? null,
-          environment: input.environment ?? null,
-        },
-      },
-      update: { enabled: input.enabled },
-      create: {
-        flagId: flag.id,
-        tenantId: input.tenantId ?? null,
-        userId: input.userId ?? null,
-        environment: input.environment ?? null,
-        enabled: input.enabled,
-      },
-    });
+    const where = {
+      flagId: flag.id,
+      tenantId: input.tenantId ?? null,
+      userId: input.userId ?? null,
+      environment: input.environment ?? null,
+    };
+
+    const existing = await this.prisma.featureFlagOverride.findFirst({ where });
+
+    if (existing) {
+      await this.prisma.featureFlagOverride.update({
+        where: { id: existing.id },
+        data: { enabled: input.enabled },
+      });
+    } else {
+      await this.prisma.featureFlagOverride.create({
+        data: { ...where, enabled: input.enabled },
+      });
+    }
 
     this.cache.invalidate(key);
 

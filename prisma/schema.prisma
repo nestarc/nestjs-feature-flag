@@ -35,6 +35,7 @@ model FeatureFlagOverride {
 
   flag FeatureFlag @relation(fields: [flagId], references: [id], onDelete: Cascade)
 
-  @@unique([flagId, tenantId, userId, environment], map: "uq_override_context")
+  // Unique indexes defined in raw SQL migration (0001) to handle NULL equality correctly
+  @@index([flagId], map: "idx_override_flag_id")
   @@map("feature_flag_overrides")
 }
