@@ -87,6 +87,16 @@ describe('FlagCacheService', () => {
     expect(cache.get('B')).toBeNull();
   });
 
+  it('should also clear allFlagsCache when invalidating a specific key', () => {
+    const flags = [makeFlagData('A'), makeFlagData('B')];
+    cache.setAll(flags);
+    expect(cache.getAll()).toEqual(flags);
+
+    cache.invalidate('A');
+
+    expect(cache.getAll()).toBeNull();
+  });
+
   it('should store and retrieve all-flags cache', () => {
     const flags = [makeFlagData('A'), makeFlagData('B')];
     cache.setAll(flags);

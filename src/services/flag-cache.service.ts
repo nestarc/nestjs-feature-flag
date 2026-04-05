@@ -51,6 +51,7 @@ export class FlagCacheService {
   invalidate(key?: string): void {
     if (key) {
       this.cache.delete(key);
+      this.allFlagsCache = null;
     } else {
       this.cache.clear();
       this.allFlagsCache = null;
