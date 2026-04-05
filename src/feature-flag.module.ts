@@ -10,6 +10,7 @@ import { FEATURE_FLAG_MODULE_OPTIONS } from './feature-flag.constants';
 import {
   FeatureFlagModuleAsyncOptions,
   FeatureFlagModuleOptions,
+  FeatureFlagModuleOptionsFactory,
 } from './interfaces/feature-flag-options.interface';
 import { FeatureFlagService } from './services/feature-flag.service';
 import { FlagCacheService } from './services/flag-cache.service';
@@ -27,6 +28,8 @@ export interface FeatureFlagModuleRootAsyncOptions extends FeatureFlagModuleAsyn
     ...args: any[]
   ) => Promise<FeatureFlagModuleRootOptions> | FeatureFlagModuleRootOptions;
 }
+
+const FULL_OPTIONS = Symbol('FEATURE_FLAG_FULL_OPTIONS');
 
 const coreProviders: Provider[] = [
   FlagCacheService,
@@ -69,6 +72,19 @@ export class FeatureFlagModule implements NestModule {
       imports: options.imports ?? [],
       providers: [
         ...asyncProviders,
+        {
+          provide: FEATURE_FLAG_MODULE_OPTIONS,
+          useFactory: (full: FeatureFlagModuleRootOptions) => {
+            const { prisma: _, ...moduleOptions } = full;
+            return moduleOptions;
+          },
+          inject: [FULL_OPTIONS],
+        },
+        {
+          provide: 'PRISMA_SERVICE',
+          useFactory: (full: FeatureFlagModuleRootOptions) => full.prisma,
+          inject: [FULL_OPTIONS],
+        },
         { provide: 'EVENT_EMITTER', useValue: null },
         ...coreProviders,
       ],
@@ -82,21 +98,32 @@ export class FeatureFlagModule implements NestModule {
     if (options.useFactory) {
       return [
         {
-          provide: FEATURE_FLAG_MODULE_OPTIONS,
-          useFactory: async (...args: any[]) => {
-            const result = await options.useFactory!(...args);
-            const { prisma: _prisma, ...moduleOptions } = result;
-            return moduleOptions;
-          },
+          provide: FULL_OPTIONS,
+          useFactory: options.useFactory,
           inject: options.inject ?? [],
         },
+      ];
+    }
+
+    if (options.useClass) {
+      return [
+        { provide: options.useClass, useClass: options.useClass },
         {
-          provide: 'PRISMA_SERVICE',
-          useFactory: async (...args: any[]) => {
-            const result = await options.useFactory!(...args);
-            return result.prisma;
-          },
-          inject: options.inject ?? [],
+          provide: FULL_OPTIONS,
+          useFactory: (factory: FeatureFlagModuleOptionsFactory) =>
+            factory.createFeatureFlagOptions(),
+          inject: [options.useClass],
+        },
+      ];
+    }
+
+    if (options.useExisting) {
+      return [
+        {
+          provide: FULL_OPTIONS,
+          useFactory: (factory: FeatureFlagModuleOptionsFactory) =>
+            factory.createFeatureFlagOptions(),
+          inject: [options.useExisting],
         },
       ];
     }

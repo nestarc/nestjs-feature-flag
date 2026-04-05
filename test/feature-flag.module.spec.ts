@@ -45,4 +45,77 @@ describe('FeatureFlagModule', () => {
       expect(module.get(FeatureFlagService)).toBeDefined();
     });
   });
+
+  describe('forRootAsync with useClass', () => {
+    it('should provide services using a class-based options factory', async () => {
+      class TestOptionsFactory {
+        createFeatureFlagOptions() {
+          return {
+            environment: 'test',
+            prisma: mockPrisma,
+          };
+        }
+      }
+
+      const module = await Test.createTestingModule({
+        imports: [
+          FeatureFlagModule.forRootAsync({
+            useClass: TestOptionsFactory,
+          }),
+        ],
+      }).compile();
+
+      expect(module.get(FeatureFlagService)).toBeDefined();
+    });
+  });
+
+  describe('forRootAsync with useExisting', () => {
+    it('should provide services using an existing provider', async () => {
+      class TestOptionsFactory {
+        createFeatureFlagOptions() {
+          return {
+            environment: 'test',
+            prisma: mockPrisma,
+          };
+        }
+      }
+
+      const module = await Test.createTestingModule({
+        imports: [
+          FeatureFlagModule.forRootAsync({
+            useExisting: TestOptionsFactory,
+            imports: [
+              {
+                module: class TestModule {},
+                providers: [TestOptionsFactory],
+                exports: [TestOptionsFactory],
+              },
+            ],
+          }),
+        ],
+      }).compile();
+
+      expect(module.get(FeatureFlagService)).toBeDefined();
+    });
+  });
+
+  describe('forRootAsync factory should only be called once', () => {
+    it('should invoke the factory exactly once', async () => {
+      const factory = jest.fn().mockReturnValue({
+        environment: 'test',
+        prisma: mockPrisma,
+      });
+
+      const module = await Test.createTestingModule({
+        imports: [
+          FeatureFlagModule.forRootAsync({
+            useFactory: factory,
+          }),
+        ],
+      }).compile();
+
+      expect(module.get(FeatureFlagService)).toBeDefined();
+      expect(factory).toHaveBeenCalledTimes(1);
+    });
+  });
 });

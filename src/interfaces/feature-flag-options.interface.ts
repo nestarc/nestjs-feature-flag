@@ -19,7 +19,9 @@ export interface FeatureFlagModuleOptions {
 }
 
 export interface FeatureFlagModuleOptionsFactory {
-  createFeatureFlagOptions(): Promise<FeatureFlagModuleOptions> | FeatureFlagModuleOptions;
+  createFeatureFlagOptions():
+    | Promise<FeatureFlagModuleOptions & { prisma: any }>
+    | (FeatureFlagModuleOptions & { prisma: any });
 }
 
 export interface FeatureFlagModuleAsyncOptions extends Pick<ModuleMetadata, 'imports'> {
