@@ -1,5 +1,11 @@
 # @nestarc/feature-flag
 
+[![npm version](https://img.shields.io/npm/v/@nestarc/feature-flag.svg)](https://www.npmjs.com/package/@nestarc/feature-flag)
+[![npm downloads](https://img.shields.io/npm/dm/@nestarc/feature-flag.svg)](https://www.npmjs.com/package/@nestarc/feature-flag)
+[![CI](https://github.com/nestarc/nestjs-feature-flag/actions/workflows/ci.yml/badge.svg)](https://github.com/nestarc/nestjs-feature-flag/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Docs](https://img.shields.io/badge/docs-nestarc.dev-blue.svg)](https://nestarc.dev/packages/feature-flag/)
+
 DB-backed feature flags for NestJS + Prisma + PostgreSQL -- tenant-aware overrides, percentage rollouts, and zero external dependencies.
 
 ## Features
