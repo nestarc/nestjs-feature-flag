@@ -504,6 +504,21 @@ const allFlags = await this.flags.findAll();
 this.flags.invalidateCache();
 ```
 
+## Performance
+
+Measured with PostgreSQL 16, Prisma 6, 500 iterations on Apple Silicon:
+
+| Scenario | Avg | P50 | P95 | P99 |
+|----------|-----|-----|-----|-----|
+| **isEnabled() — cache hit** | **0.04ms** | **0.03ms** | **0.05ms** | **0.07ms** |
+| isEnabled() — cache miss (DB lookup) | 1.30ms | 1.14ms | 2.54ms | 3.69ms |
+| isEnabled() — override cascade (cold) | 1.07ms | 1.02ms | 1.43ms | 2.11ms |
+| **evaluateAll() — 50 flags (mixed)** | **0.19ms** | **0.04ms** | **1.55ms** | **1.71ms** |
+
+Cache speedup: **32.5x** (hit vs miss). Keep the default 30s cache TTL for optimal performance.
+
+> Reproduce: `docker compose up -d && dotenv -e .env.test -- npx ts-node benchmarks/evaluation-overhead.ts`
+
 ## License
 
 MIT
