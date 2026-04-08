@@ -40,10 +40,15 @@
   "keywords": [
     "nestjs",
     "feature-flag",
+    "feature-flags",
     "feature-toggle",
+    "rollout",
+    "percentage-rollout",
     "prisma",
     "postgresql",
-    "multi-tenant"
+    "multi-tenant",
+    "nestjs-module",
+    "saas"
   ],
   "author": "nestarc",
   "license": "MIT",
