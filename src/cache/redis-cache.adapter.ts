@@ -92,9 +92,20 @@ export class RedisCacheAdapter implements CacheAdapter {
   }
 
   private async flushLocal(): Promise<void> {
-    const keys = await this.client.keys(`${this.keyPrefix}*`);
-    if (keys.length > 0) {
-      await this.client.del(...keys);
-    }
+    const pattern = `${this.keyPrefix}*`;
+    let cursor = '0';
+    do {
+      const [nextCursor, keys] = await this.client.scan(
+        cursor,
+        'MATCH',
+        pattern,
+        'COUNT',
+        100,
+      );
+      cursor = nextCursor;
+      if (keys.length > 0) {
+        await this.client.del(...keys);
+      }
+    } while (cursor !== '0');
   }
 }

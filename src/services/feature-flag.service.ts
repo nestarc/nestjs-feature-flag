@@ -128,7 +128,7 @@ export class FeatureFlagService {
   async setOverride(key: string, input: SetOverrideInput): Promise<void> {
     const flag = await this.prisma.featureFlag.findUnique({ where: { key } });
     if (!flag) {
-      throw new Error(`Feature flag "${key}" not found`);
+      throw new NotFoundException(`Feature flag "${key}" not found`);
     }
 
     const where = {

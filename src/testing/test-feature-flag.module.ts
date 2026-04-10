@@ -1,4 +1,4 @@
-import { Module, DynamicModule } from '@nestjs/common';
+import { Module, DynamicModule, NotFoundException } from '@nestjs/common';
 import { FeatureFlagService } from '../services/feature-flag.service';
 
 @Module({})
@@ -17,7 +17,14 @@ export class TestFeatureFlagModule {
             update: async () => ({}),
             archive: async () => ({}),
             setOverride: async () => {},
+            removeOverride: async () => {},
             findAll: async () => [],
+            findByKey: async (key: string) => {
+              if (flags && key in flags) {
+                return { key, enabled: flags[key], overrides: [] };
+              }
+              throw new NotFoundException(`Feature flag "${key}" not found`);
+            },
             invalidateCache: () => {},
           },
         },
