@@ -1,3 +1,4 @@
+import { NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { PrismaFeatureFlagRepository } from '../../src/repositories/prisma-feature-flag.repository';
 
 describe('PrismaFeatureFlagRepository', () => {
@@ -73,6 +74,20 @@ describe('PrismaFeatureFlagRepository', () => {
         include: { overrides: true },
       });
     });
+
+    it('should throw ConflictException on duplicate key (P2002)', async () => {
+      prisma.featureFlag.create.mockRejectedValue({ code: 'P2002' });
+
+      await expect(repository.createFlag({ key: 'dup' })).rejects.toThrow(ConflictException);
+    });
+
+    it('should throw BadRequestException for percentage < 0', async () => {
+      await expect(repository.createFlag({ key: 'x', percentage: -1 })).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException for percentage > 100', async () => {
+      await expect(repository.createFlag({ key: 'x', percentage: 101 })).rejects.toThrow(BadRequestException);
+    });
   });
 
   describe('updateFlag', () => {
@@ -103,6 +118,16 @@ describe('PrismaFeatureFlagRepository', () => {
         include: { overrides: true },
       });
     });
+
+    it('should throw NotFoundException on missing key (P2025)', async () => {
+      prisma.featureFlag.update.mockRejectedValue({ code: 'P2025' });
+
+      await expect(repository.updateFlag('nope', { enabled: true })).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw BadRequestException for invalid percentage', async () => {
+      await expect(repository.updateFlag('x', { percentage: 200 })).rejects.toThrow(BadRequestException);
+    });
   });
 
   describe('archiveFlag', () => {
@@ -118,6 +143,12 @@ describe('PrismaFeatureFlagRepository', () => {
         include: { overrides: true },
       });
       expect(result).toBe(expected);
+    });
+
+    it('should throw NotFoundException on missing key (P2025)', async () => {
+      prisma.featureFlag.update.mockRejectedValue({ code: 'P2025' });
+
+      await expect(repository.archiveFlag('nope')).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -214,6 +245,20 @@ describe('PrismaFeatureFlagRepository', () => {
         data: { flagId: 'flag-id', tenantId: 't1', userId: null, environment: 'staging', enabled: true },
       });
     });
+
+    it('should fall back to update on unique violation (P2002 race)', async () => {
+      const criteria = { tenantId: null, userId: null, environment: null };
+      prisma.featureFlagOverride.create.mockRejectedValue({ code: 'P2002' });
+      prisma.featureFlagOverride.findFirst.mockResolvedValue({ id: 'existing-id' });
+      prisma.featureFlagOverride.update.mockResolvedValue({});
+
+      await repository.createOverride('flag-id', criteria, true);
+
+      expect(prisma.featureFlagOverride.update).toHaveBeenCalledWith({
+        where: { id: 'existing-id' },
+        data: { enabled: true },
+      });
+    });
   });
 
   describe('updateOverrideEnabled', () => {
@@ -238,6 +283,12 @@ describe('PrismaFeatureFlagRepository', () => {
       expect(prisma.featureFlagOverride.delete).toHaveBeenCalledWith({
         where: { id: 'override-1' },
       });
+    });
+
+    it('should silently succeed when record already deleted (P2025)', async () => {
+      prisma.featureFlagOverride.delete.mockRejectedValue({ code: 'P2025' });
+
+      await expect(repository.deleteOverride('gone-id')).resolves.toBeUndefined();
     });
   });
 });

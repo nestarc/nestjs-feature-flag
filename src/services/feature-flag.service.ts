@@ -16,6 +16,8 @@ import { FlagContextResolver } from './flag-context-resolver';
 import { FlagEventPublisher } from './flag-event-publisher';
 import { FeatureFlagEvents, FlagEvaluatedEvent } from '../events/feature-flag.events';
 
+const CACHE_INVALIDATION_FAILED = 'feature-flag.cache.invalidation-failed';
+
 @Injectable()
 export class FeatureFlagService {
   constructor(
@@ -67,21 +69,21 @@ export class FeatureFlagService {
 
   async create(input: CreateFeatureFlagInput): Promise<FeatureFlagWithOverrides> {
     const flag = await this.repository.createFlag(input);
-    await this.cacheAdapter.invalidate();
+    await this.safeInvalidateCache();
     this.eventPublisher.emit(FeatureFlagEvents.CREATED, { flagKey: input.key, action: 'created' });
     return flag;
   }
 
   async update(key: string, input: UpdateFeatureFlagInput): Promise<FeatureFlagWithOverrides> {
     const flag = await this.repository.updateFlag(key, input);
-    await this.cacheAdapter.invalidate(key);
+    await this.safeInvalidateCache(key);
     this.eventPublisher.emit(FeatureFlagEvents.UPDATED, { flagKey: key, action: 'updated' });
     return flag;
   }
 
   async archive(key: string): Promise<FeatureFlagWithOverrides> {
     const flag = await this.repository.archiveFlag(key);
-    await this.cacheAdapter.invalidate(key);
+    await this.safeInvalidateCache(key);
     this.eventPublisher.emit(FeatureFlagEvents.ARCHIVED, { flagKey: key, action: 'archived' });
     return flag;
   }
@@ -105,7 +107,7 @@ export class FeatureFlagService {
       await this.repository.createOverride(flagId, criteria, input.enabled);
     }
 
-    await this.cacheAdapter.invalidate(key);
+    await this.safeInvalidateCache(key);
     this.eventPublisher.emit(FeatureFlagEvents.OVERRIDE_SET, {
       flagKey: key,
       ...input,
@@ -147,12 +149,28 @@ export class FeatureFlagService {
       await this.repository.deleteOverride(existing.id);
     }
 
-    await this.cacheAdapter.invalidate(key);
+    await this.safeInvalidateCache(key);
     this.eventPublisher.emit(FeatureFlagEvents.OVERRIDE_REMOVED, {
       flagKey: key,
       ...input,
       action: 'removed',
     });
+  }
+
+  /**
+   * Best-effort cache invalidation for mutation paths.
+   * DB write already succeeded — cache failure should not fail the caller.
+   * Stale entries self-heal via TTL (default 30s).
+   */
+  private async safeInvalidateCache(key?: string): Promise<void> {
+    try {
+      await this.cacheAdapter.invalidate(key);
+    } catch (error) {
+      this.eventPublisher.emit(CACHE_INVALIDATION_FAILED, {
+        key: key ?? '__all__',
+        error: String(error),
+      });
+    }
   }
 
   private async resolveFlag(key: string): Promise<FeatureFlagWithOverrides | null> {
