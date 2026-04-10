@@ -38,3 +38,13 @@ export {
 
 // Constants
 export { FEATURE_FLAG_MODULE_OPTIONS } from './feature-flag.constants';
+export { CACHE_ADAPTER } from './feature-flag.constants';
+
+// Cache adapters
+export type { CacheAdapter, RemoveOverrideInput } from './interfaces/cache-adapter.interface';
+export { MemoryCacheAdapter } from './cache/memory-cache.adapter';
+export { RedisCacheAdapter, type RedisCacheAdapterOptions } from './cache/redis-cache.adapter';
+
+// Admin module
+export { FeatureFlagAdminModule } from './admin/feature-flag-admin.module';
+export type { FeatureFlagAdminOptions } from './admin/admin-options.interface';
