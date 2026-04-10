@@ -1,5 +1,5 @@
+import { NotFoundException } from '@nestjs/common';
 import { FeatureFlagService } from '../../src/services/feature-flag.service';
-import { FlagCacheService } from '../../src/services/flag-cache.service';
 import { FlagEvaluatorService } from '../../src/services/flag-evaluator.service';
 import { FlagContext } from '../../src/services/flag-context';
 import { FeatureFlagModuleOptions } from '../../src/interfaces/feature-flag-options.interface';
@@ -23,19 +23,26 @@ function makeFlagRecord(key: string, overrides: Partial<FeatureFlagWithOverrides
 
 describe('FeatureFlagService', () => {
   let service: FeatureFlagService;
-  let cache: FlagCacheService;
   let evaluator: FlagEvaluatorService;
   let context: FlagContext;
   let mockPrisma: any;
   let mockModuleRef: any;
   let mockEventEmitter: any;
   let options: FeatureFlagModuleOptions;
+  let mockCacheAdapter: any;
 
   beforeEach(() => {
     options = { environment: 'test', cacheTtlMs: 5000 };
-    cache = new FlagCacheService(options);
     evaluator = new FlagEvaluatorService();
     context = new FlagContext();
+
+    mockCacheAdapter = {
+      get: jest.fn().mockResolvedValue(null),
+      set: jest.fn().mockResolvedValue(undefined),
+      getAll: jest.fn().mockResolvedValue(null),
+      setAll: jest.fn().mockResolvedValue(undefined),
+      invalidate: jest.fn().mockResolvedValue(undefined),
+    };
 
     mockPrisma = {
       featureFlag: {
@@ -50,6 +57,7 @@ describe('FeatureFlagService', () => {
         findFirst: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
+        delete: jest.fn(),
       },
     };
 
@@ -64,7 +72,7 @@ describe('FeatureFlagService', () => {
     service = new FeatureFlagService(
       options,
       mockPrisma,
-      cache,
+      mockCacheAdapter,
       evaluator,
       context,
       mockModuleRef,
@@ -83,7 +91,7 @@ describe('FeatureFlagService', () => {
       const serviceWithDefault = new FeatureFlagService(
         { ...options, defaultOnMissing: true },
         mockPrisma,
-        cache,
+        mockCacheAdapter,
         evaluator,
         context,
         mockModuleRef,
@@ -104,11 +112,12 @@ describe('FeatureFlagService', () => {
         where: { key: 'MY_FLAG' },
         include: { overrides: true },
       });
+      expect(mockCacheAdapter.set).toHaveBeenCalledWith('MY_FLAG', flag, 5000);
     });
 
     it('should use cached flag on cache hit', async () => {
       const flag = makeFlagRecord('MY_FLAG', { enabled: true });
-      cache.set('MY_FLAG', flag);
+      mockCacheAdapter.get.mockResolvedValue(flag);
 
       const result = await service.isEnabled('MY_FLAG');
       expect(result).toBe(true);
@@ -175,7 +184,7 @@ describe('FeatureFlagService', () => {
       const flags = [
         makeFlagRecord('FLAG_A', { enabled: true }),
       ];
-      cache.setAll(flags);
+      mockCacheAdapter.getAll.mockResolvedValue(flags);
 
       const result = await service.evaluateAll();
       expect(result).toEqual({ FLAG_A: true });
@@ -195,6 +204,7 @@ describe('FeatureFlagService', () => {
 
       expect(result.key).toBe('NEW_FLAG');
       expect(mockPrisma.featureFlag.create).toHaveBeenCalled();
+      expect(mockCacheAdapter.invalidate).toHaveBeenCalled();
     });
   });
 
@@ -205,6 +215,7 @@ describe('FeatureFlagService', () => {
 
       const result = await service.update('MY_FLAG', { enabled: true });
       expect(result.enabled).toBe(true);
+      expect(mockCacheAdapter.invalidate).toHaveBeenCalledWith('MY_FLAG');
     });
   });
 
@@ -317,10 +328,48 @@ describe('FeatureFlagService', () => {
   });
 
   describe('invalidateCache', () => {
-    it('should clear the cache', () => {
-      cache.set('A', makeFlagRecord('A'));
-      service.invalidateCache();
-      expect(cache.get('A')).toBeNull();
+    it('should clear the cache', async () => {
+      await service.invalidateCache();
+      expect(mockCacheAdapter.invalidate).toHaveBeenCalled();
+    });
+  });
+
+  describe('findByKey', () => {
+    it('should return the flag when found', async () => {
+      const mockFlagData = makeFlagRecord('TEST');
+      mockPrisma.featureFlag.findUnique.mockResolvedValue(mockFlagData);
+      const result = await service.findByKey('TEST');
+      expect(result).toEqual(mockFlagData);
+    });
+
+    it('should throw NotFoundException when not found', async () => {
+      mockPrisma.featureFlag.findUnique.mockResolvedValue(null);
+      await expect(service.findByKey('MISSING')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('removeOverride', () => {
+    it('should delete existing override and invalidate cache', async () => {
+      mockPrisma.featureFlag.findUnique.mockResolvedValue({ id: 'flag-1' });
+      mockPrisma.featureFlagOverride.findFirst.mockResolvedValue({ id: 'ov-1' });
+      mockPrisma.featureFlagOverride.delete.mockResolvedValue({});
+
+      await service.removeOverride('TEST', { tenantId: 't-1' });
+
+      expect(mockPrisma.featureFlagOverride.delete).toHaveBeenCalledWith({ where: { id: 'ov-1' } });
+      expect(mockCacheAdapter.invalidate).toHaveBeenCalledWith('TEST');
+    });
+
+    it('should throw NotFoundException when flag not found', async () => {
+      mockPrisma.featureFlag.findUnique.mockResolvedValue(null);
+      await expect(service.removeOverride('MISSING', {})).rejects.toThrow(NotFoundException);
+    });
+
+    it('should not fail when override does not exist', async () => {
+      mockPrisma.featureFlag.findUnique.mockResolvedValue({ id: 'flag-1' });
+      mockPrisma.featureFlagOverride.findFirst.mockResolvedValue(null);
+
+      await expect(service.removeOverride('TEST', {})).resolves.not.toThrow();
     });
   });
 
@@ -331,7 +380,7 @@ describe('FeatureFlagService', () => {
       serviceWithEvents = new FeatureFlagService(
         { ...options, emitEvents: true },
         mockPrisma,
-        cache,
+        mockCacheAdapter,
         evaluator,
         context,
         mockModuleRef,
@@ -400,8 +449,8 @@ describe('FeatureFlagService', () => {
       );
     });
 
-    it('should emit CACHE_INVALIDATED event on invalidateCache', () => {
-      serviceWithEvents.invalidateCache();
+    it('should emit CACHE_INVALIDATED event on invalidateCache', async () => {
+      await serviceWithEvents.invalidateCache();
       expect(mockEventEmitter.emit).toHaveBeenCalledWith(
         expect.stringContaining('cache'),
         expect.any(Object),

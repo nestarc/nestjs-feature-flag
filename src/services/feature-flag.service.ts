@@ -1,6 +1,6 @@
-import { Injectable, Inject, Optional } from '@nestjs/common';
+import { Injectable, Inject, Optional, NotFoundException } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
-import { FEATURE_FLAG_MODULE_OPTIONS } from '../feature-flag.constants';
+import { FEATURE_FLAG_MODULE_OPTIONS, CACHE_ADAPTER } from '../feature-flag.constants';
 import { FeatureFlagModuleOptions } from '../interfaces/feature-flag-options.interface';
 import {
   CreateFeatureFlagInput,
@@ -9,7 +9,7 @@ import {
   FeatureFlagWithOverrides,
 } from '../interfaces/feature-flag.interface';
 import { EvaluationContext } from '../interfaces/evaluation-context.interface';
-import { FlagCacheService } from './flag-cache.service';
+import { CacheAdapter, RemoveOverrideInput } from '../interfaces/cache-adapter.interface';
 import { FlagEvaluatorService } from './flag-evaluator.service';
 import { FlagContext } from './flag-context';
 import { FeatureFlagEvents, FlagEvaluatedEvent } from '../events/feature-flag.events';
@@ -19,12 +19,16 @@ export class FeatureFlagService {
   constructor(
     @Inject(FEATURE_FLAG_MODULE_OPTIONS) private readonly options: FeatureFlagModuleOptions,
     @Inject('PRISMA_SERVICE') private readonly prisma: any,
-    private readonly cache: FlagCacheService,
+    @Inject(CACHE_ADAPTER) private readonly cacheAdapter: CacheAdapter,
     private readonly evaluator: FlagEvaluatorService,
     private readonly flagContext: FlagContext,
     private readonly moduleRef: ModuleRef,
     @Optional() @Inject('EVENT_EMITTER') private readonly eventEmitter?: any,
   ) {}
+
+  private get cacheTtlMs(): number {
+    return this.options.cacheTtlMs ?? 30_000;
+  }
 
   async isEnabled(flagKey: string, explicitContext?: EvaluationContext): Promise<boolean> {
     const flag = await this.resolveFlag(flagKey);
@@ -75,7 +79,7 @@ export class FeatureFlagService {
       include: { overrides: true },
     });
 
-    this.cache.invalidate();
+    await this.cacheAdapter.invalidate();
 
     if (this.options.emitEvents && this.eventEmitter) {
       this.eventEmitter.emit(FeatureFlagEvents.CREATED, { flagKey: input.key, action: 'created' });
@@ -96,7 +100,7 @@ export class FeatureFlagService {
       include: { overrides: true },
     });
 
-    this.cache.invalidate(key);
+    await this.cacheAdapter.invalidate(key);
 
     if (this.options.emitEvents && this.eventEmitter) {
       this.eventEmitter.emit(FeatureFlagEvents.UPDATED, { flagKey: key, action: 'updated' });
@@ -112,7 +116,7 @@ export class FeatureFlagService {
       include: { overrides: true },
     });
 
-    this.cache.invalidate(key);
+    await this.cacheAdapter.invalidate(key);
 
     if (this.options.emitEvents && this.eventEmitter) {
       this.eventEmitter.emit(FeatureFlagEvents.ARCHIVED, { flagKey: key, action: 'archived' });
@@ -147,7 +151,7 @@ export class FeatureFlagService {
       });
     }
 
-    this.cache.invalidate(key);
+    await this.cacheAdapter.invalidate(key);
 
     if (this.options.emitEvents && this.eventEmitter) {
       this.eventEmitter.emit(FeatureFlagEvents.OVERRIDE_SET, {
@@ -166,16 +170,56 @@ export class FeatureFlagService {
     });
   }
 
-  invalidateCache(): void {
-    this.cache.invalidate();
+  async invalidateCache(): Promise<void> {
+    await this.cacheAdapter.invalidate();
 
     if (this.options.emitEvents && this.eventEmitter) {
       this.eventEmitter.emit(FeatureFlagEvents.CACHE_INVALIDATED, {});
     }
   }
 
+  async findByKey(key: string): Promise<FeatureFlagWithOverrides> {
+    const flag = await this.prisma.featureFlag.findUnique({
+      where: { key },
+      include: { overrides: true },
+    });
+    if (!flag) {
+      throw new NotFoundException(`Feature flag "${key}" not found`);
+    }
+    return flag;
+  }
+
+  async removeOverride(key: string, input: RemoveOverrideInput): Promise<void> {
+    const flag = await this.prisma.featureFlag.findUnique({ where: { key } });
+    if (!flag) {
+      throw new NotFoundException(`Feature flag "${key}" not found`);
+    }
+
+    const where = {
+      flagId: flag.id,
+      tenantId: input.tenantId ?? null,
+      userId: input.userId ?? null,
+      environment: input.environment ?? null,
+    };
+
+    const existing = await this.prisma.featureFlagOverride.findFirst({ where });
+    if (existing) {
+      await this.prisma.featureFlagOverride.delete({ where: { id: existing.id } });
+    }
+
+    await this.cacheAdapter.invalidate(key);
+
+    if (this.options.emitEvents && this.eventEmitter) {
+      this.eventEmitter.emit(FeatureFlagEvents.OVERRIDE_REMOVED, {
+        flagKey: key,
+        ...input,
+        action: 'removed',
+      });
+    }
+  }
+
   private async resolveFlag(key: string): Promise<FeatureFlagWithOverrides | null> {
-    const cached = this.cache.get(key);
+    const cached = await this.cacheAdapter.get(key);
     if (cached) return cached;
 
     const flag = await this.prisma.featureFlag.findUnique({
@@ -184,14 +228,14 @@ export class FeatureFlagService {
     });
 
     if (flag) {
-      this.cache.set(key, flag);
+      await this.cacheAdapter.set(key, flag, this.cacheTtlMs);
     }
 
     return flag;
   }
 
   private async resolveAllFlags(): Promise<FeatureFlagWithOverrides[]> {
-    const cached = this.cache.getAll();
+    const cached = await this.cacheAdapter.getAll();
     if (cached) return cached;
 
     const flags = await this.prisma.featureFlag.findMany({
@@ -199,7 +243,7 @@ export class FeatureFlagService {
       include: { overrides: true },
     });
 
-    this.cache.setAll(flags);
+    await this.cacheAdapter.setAll(flags, this.cacheTtlMs);
     return flags;
   }
 

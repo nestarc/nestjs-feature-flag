@@ -1,9 +1,9 @@
 import { Test } from '@nestjs/testing';
 import { FeatureFlagModule } from '../src/feature-flag.module';
 import { FeatureFlagService } from '../src/services/feature-flag.service';
-import { FlagCacheService } from '../src/services/flag-cache.service';
 import { FlagEvaluatorService } from '../src/services/flag-evaluator.service';
 import { FlagContext } from '../src/services/flag-context';
+import { CACHE_ADAPTER } from '../src/feature-flag.constants';
 
 const mockPrisma = {
   featureFlag: { findUnique: jest.fn(), findMany: jest.fn(), create: jest.fn(), update: jest.fn() },
@@ -23,7 +23,7 @@ describe('FeatureFlagModule', () => {
       }).compile();
 
       expect(module.get(FeatureFlagService)).toBeDefined();
-      expect(module.get(FlagCacheService)).toBeDefined();
+      expect(module.get(CACHE_ADAPTER)).toBeDefined();
       expect(module.get(FlagEvaluatorService)).toBeDefined();
       expect(module.get(FlagContext)).toBeDefined();
     });

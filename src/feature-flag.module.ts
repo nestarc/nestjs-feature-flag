@@ -7,14 +7,14 @@ import {
   RequestMethod,
 } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
-import { FEATURE_FLAG_MODULE_OPTIONS } from './feature-flag.constants';
+import { FEATURE_FLAG_MODULE_OPTIONS, CACHE_ADAPTER } from './feature-flag.constants';
 import {
   FeatureFlagModuleAsyncOptions,
   FeatureFlagModuleOptions,
   FeatureFlagModuleOptionsFactory,
 } from './interfaces/feature-flag-options.interface';
 import { FeatureFlagService } from './services/feature-flag.service';
-import { FlagCacheService } from './services/flag-cache.service';
+import { MemoryCacheAdapter } from './cache/memory-cache.adapter';
 import { FlagEvaluatorService } from './services/flag-evaluator.service';
 import { FlagContext } from './services/flag-context';
 import { FeatureFlagGuard } from './guards/feature-flag.guard';
@@ -33,7 +33,6 @@ export interface FeatureFlagModuleRootAsyncOptions extends FeatureFlagModuleAsyn
 const FULL_OPTIONS = Symbol('FEATURE_FLAG_FULL_OPTIONS');
 
 const coreProviders: Provider[] = [
-  FlagCacheService,
   FlagEvaluatorService,
   FlagContext,
   FeatureFlagGuard,
@@ -68,9 +67,13 @@ export class FeatureFlagModule implements NestModule {
         { provide: FEATURE_FLAG_MODULE_OPTIONS, useValue: moduleOptions },
         { provide: 'PRISMA_SERVICE', useValue: prisma },
         eventProvider,
+        {
+          provide: CACHE_ADAPTER,
+          useValue: options.cacheAdapter ?? new MemoryCacheAdapter(),
+        },
         ...coreProviders,
       ],
-      exports: [FeatureFlagService, FlagContext, FEATURE_FLAG_MODULE_OPTIONS],
+      exports: [FeatureFlagService, FlagContext, FEATURE_FLAG_MODULE_OPTIONS, CACHE_ADAPTER],
     };
   }
 
@@ -107,9 +110,15 @@ export class FeatureFlagModule implements NestModule {
           },
           inject: [FULL_OPTIONS, ModuleRef],
         },
+        {
+          provide: CACHE_ADAPTER,
+          useFactory: (full: FeatureFlagModuleRootOptions) =>
+            full.cacheAdapter ?? new MemoryCacheAdapter(),
+          inject: [FULL_OPTIONS],
+        },
         ...coreProviders,
       ],
-      exports: [FeatureFlagService, FlagContext, FEATURE_FLAG_MODULE_OPTIONS],
+      exports: [FeatureFlagService, FlagContext, FEATURE_FLAG_MODULE_OPTIONS, CACHE_ADAPTER],
     };
   }
 
