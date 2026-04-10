@@ -2,6 +2,33 @@
 
 All notable changes to `@nestarc/feature-flag` will be documented in this file.
 
+## [0.2.0] — 2026-04-10
+
+### Added
+- `CacheAdapter` interface for pluggable cache backends
+- `MemoryCacheAdapter` (refactored from internal FlagCacheService)
+- `RedisCacheAdapter` with Redis Pub/Sub for cross-instance cache invalidation
+- `FeatureFlagAdminModule` — opt-in REST Admin API with guard injection
+  - `POST /feature-flags` — create flag
+  - `GET /feature-flags` — list all flags
+  - `GET /feature-flags/:key` — get single flag
+  - `PATCH /feature-flags/:key` — update flag
+  - `DELETE /feature-flags/:key` — archive flag
+  - `POST /feature-flags/:key/overrides` — set override
+  - `DELETE /feature-flags/:key/overrides` — remove override
+- `findByKey()` method on FeatureFlagService (throws NotFoundException)
+- `removeOverride()` method on FeatureFlagService
+- `RemoveOverrideInput` type
+- `CACHE_ADAPTER` injection token
+- `ioredis` as optional peer dependency
+
+### Changed
+- All cache operations are now async (`CacheAdapter` interface)
+- `cacheAdapter` option added to `FeatureFlagModuleOptions` (optional, defaults to `MemoryCacheAdapter`)
+
+### Removed
+- `FlagCacheService` (internal, replaced by `CacheAdapter` + `MemoryCacheAdapter`)
+
 ## [0.1.0] - 2026-04-05
 
 ### Added

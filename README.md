@@ -37,7 +37,34 @@ npm install @nestjs/common @nestjs/core @prisma/client rxjs reflect-metadata
 ```bash
 # Required only if you enable emitEvents
 npm install @nestjs/event-emitter
+
+# Required only if you use RedisCacheAdapter
+npm install ioredis
 ```
+
+## Redis Cache (Multi-Instance)
+
+For production deployments with multiple instances, use `RedisCacheAdapter` for shared caching and real-time invalidation via Redis Pub/Sub:
+
+```typescript
+import { FeatureFlagModule, RedisCacheAdapter } from '@nestarc/feature-flag';
+import { Redis } from 'ioredis';
+
+const redisClient = new Redis({ host: 'localhost', port: 6379 });
+
+FeatureFlagModule.forRoot({
+  environment: 'production',
+  prisma,
+  cacheAdapter: new RedisCacheAdapter({
+    client: redisClient,
+    // subscriber is auto-created via client.duplicate()
+    // keyPrefix: 'feature-flag:',   // default
+    // channel: 'feature-flag:invalidate',  // default
+  }),
+})
+```
+
+When a flag is updated on any instance, all other instances are notified via Pub/Sub and invalidate their cache immediately — eliminating the stale-cache window.
 
 ## Prisma Schema
 
@@ -472,6 +499,7 @@ Percentage rollout uses murmurhash3 for deterministic bucketing: the same user a
 | `userIdExtractor`   | `(req: Request) => string \| null`| `undefined`| Extracts user ID from the incoming request                     |
 | `defaultOnMissing`  | `boolean`                         | `false`   | Value returned when a flag key does not exist in the database   |
 | `emitEvents`        | `boolean`                         | `false`   | Emit lifecycle events via `@nestjs/event-emitter`               |
+| `cacheAdapter`      | `CacheAdapter`                    | `MemoryCacheAdapter` | Pluggable cache backend (e.g. `RedisCacheAdapter`)  |
 
 ### FeatureFlagModuleRootOptions
 
@@ -509,6 +537,38 @@ const allFlags = await this.flags.findAll();
 // Manually invalidate the cache
 this.flags.invalidateCache();
 ```
+
+## Admin REST API
+
+`FeatureFlagAdminModule` provides a REST API for managing flags. It requires a guard — the module won't register without one:
+
+```typescript
+import { FeatureFlagAdminModule } from '@nestarc/feature-flag';
+import { AdminAuthGuard } from './guards/admin-auth.guard';
+
+@Module({
+  imports: [
+    FeatureFlagModule.forRoot({ ... }),
+    FeatureFlagAdminModule.register({
+      guard: AdminAuthGuard,
+      // path: 'feature-flags',  // default
+    }),
+  ],
+})
+export class AppModule {}
+```
+
+### Endpoints
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| POST | `/feature-flags` | Create a flag |
+| GET | `/feature-flags` | List all flags |
+| GET | `/feature-flags/:key` | Get a single flag |
+| PATCH | `/feature-flags/:key` | Update a flag |
+| DELETE | `/feature-flags/:key` | Archive a flag |
+| POST | `/feature-flags/:key/overrides` | Set an override |
+| DELETE | `/feature-flags/:key/overrides` | Remove an override |
 
 ## Performance
 
