@@ -1,5 +1,6 @@
 import { ModuleMetadata, Type } from '@nestjs/common';
 import { Request } from 'express';
+import { CacheAdapter } from './cache-adapter.interface';
 
 export interface FeatureFlagModuleOptions {
   /** Current environment (e.g., 'development', 'staging', 'production') */
@@ -16,6 +17,9 @@ export interface FeatureFlagModuleOptions {
 
   /** Emit evaluation events via @nestjs/event-emitter. Default: false */
   emitEvents?: boolean;
+
+  /** Custom cache adapter implementation. If not provided, an in-memory cache is used. */
+  cacheAdapter?: CacheAdapter;
 }
 
 export interface FeatureFlagModuleOptionsFactory {
