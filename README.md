@@ -16,7 +16,10 @@ DB-backed feature flags for NestJS + Prisma + PostgreSQL -- tenant-aware overrid
 - **Guard decorator** -- `@FeatureFlag()` automatically gates routes and controllers
 - **Bypass decorator** -- `@BypassFeatureFlag()` exempts health checks and public endpoints
 - **Programmatic evaluation** -- `isEnabled()` and `evaluateAll()` for service-layer logic
-- **Built-in caching** -- configurable TTL with manual invalidation
+- **Built-in caching** -- configurable TTL with manual invalidation; Redis Pub/Sub for multi-instance
+- **Pluggable persistence** -- `FeatureFlagRepository` interface for custom backends (Prisma default)
+- **Pluggable tenancy** -- `TenantContextProvider` interface for custom tenant resolution
+- **Admin REST API** -- opt-in `FeatureFlagAdminModule` with guard injection and proper error responses
 - **Event system** -- optional integration with `@nestjs/event-emitter` for audit and observability
 - **Testing utilities** -- drop-in `TestFeatureFlagModule` for unit and integration tests
 
@@ -471,7 +474,13 @@ describe('DashboardController', () => {
 });
 ```
 
-`TestFeatureFlagModule.register()` provides a global mock of `FeatureFlagService` where `isEnabled(key)` returns the boolean you specified (defaulting to `false` for unregistered keys) and `evaluateAll()` returns the full map.
+`TestFeatureFlagModule.register()` provides a global mock of `FeatureFlagService`:
+- `isEnabled(key)` returns the boolean you specified (defaulting to `false` for unregistered keys)
+- `evaluateAll()` returns the full flag map
+- `create()`, `update()`, `archive()`, `findByKey()`, `findAll()` return full `FeatureFlagWithOverrides` stub objects
+- `findByKey()` throws `NotFoundException` for unknown keys
+
+This is a **stateless boolean stub** -- write operations do not persist state across calls. For stateful test doubles, use your own mock implementation.
 
 ## Evaluation Priority
 
@@ -560,15 +569,73 @@ export class AppModule {}
 
 ### Endpoints
 
-| Method | Route | Description |
-|--------|-------|-------------|
-| POST | `/feature-flags` | Create a flag |
-| GET | `/feature-flags` | List all flags |
-| GET | `/feature-flags/:key` | Get a single flag |
-| PATCH | `/feature-flags/:key` | Update a flag |
-| DELETE | `/feature-flags/:key` | Archive a flag |
-| POST | `/feature-flags/:key/overrides` | Set an override |
-| DELETE | `/feature-flags/:key/overrides` | Remove an override |
+| Method | Route | Description | Error Responses |
+|--------|-------|-------------|-----------------|
+| POST | `/feature-flags` | Create a flag | 409 duplicate key, 400 invalid percentage |
+| GET | `/feature-flags` | List all flags | |
+| GET | `/feature-flags/:key` | Get a single flag | 404 not found |
+| PATCH | `/feature-flags/:key` | Update a flag | 404 not found, 400 invalid percentage |
+| DELETE | `/feature-flags/:key` | Archive a flag | 404 not found |
+| POST | `/feature-flags/:key/overrides` | Set an override | 404 flag not found |
+| DELETE | `/feature-flags/:key/overrides` | Remove an override | 404 flag not found |
+
+Percentage values must be between 0 and 100 (inclusive). Invalid values return 400 Bad Request.
+
+## Custom Persistence (Advanced)
+
+The default `PrismaFeatureFlagRepository` can be replaced with any implementation of `FeatureFlagRepository`:
+
+```typescript
+import {
+  FeatureFlagModule,
+  FEATURE_FLAG_REPOSITORY,
+  FeatureFlagRepository,
+} from '@nestarc/feature-flag';
+
+@Module({
+  imports: [
+    FeatureFlagModule.forRoot({
+      environment: 'production',
+      prisma, // still required for module init, but unused if you override the repository
+    }),
+  ],
+  providers: [
+    {
+      provide: FEATURE_FLAG_REPOSITORY,
+      useClass: MyCustomRepository, // implements FeatureFlagRepository
+    },
+  ],
+})
+export class AppModule {}
+```
+
+## Custom Tenant Resolution (Advanced)
+
+Override the default `@nestarc/tenancy` integration with your own `TenantContextProvider`:
+
+```typescript
+import {
+  FeatureFlagModule,
+  TENANT_CONTEXT_PROVIDER,
+  TenantContextProvider,
+} from '@nestarc/feature-flag';
+
+@Injectable()
+class MyTenantProvider implements TenantContextProvider {
+  getCurrentTenantId(): string | null {
+    // your custom tenant resolution logic
+    return 'tenant-from-custom-source';
+  }
+}
+
+@Module({
+  imports: [FeatureFlagModule.forRoot({ ... })],
+  providers: [
+    { provide: TENANT_CONTEXT_PROVIDER, useClass: MyTenantProvider },
+  ],
+})
+export class AppModule {}
+```
 
 ## Performance
 
