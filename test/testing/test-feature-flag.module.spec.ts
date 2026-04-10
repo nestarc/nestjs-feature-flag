@@ -44,20 +44,30 @@ describe('TestFeatureFlagModule', () => {
     expect(await service.isEnabled('ANY')).toBe(false);
   });
 
-  it('should expose mock create, update, archive, setOverride, removeOverride, findAll, invalidateCache', async () => {
+  it('should return FeatureFlagWithOverrides from create, update, archive, findAll', async () => {
     const module = await Test.createTestingModule({
       imports: [TestFeatureFlagModule.register({ FEATURE_A: true })],
     }).compile();
 
     const service = module.get(FeatureFlagService);
 
-    await expect(service.create({ key: 'X' } as any)).resolves.toEqual({});
-    await expect(service.update('X', {} as any)).resolves.toEqual({});
-    await expect(service.archive('X')).resolves.toEqual({});
+    const created = await service.create({ key: 'X' } as any);
+    expect(created).toEqual(expect.objectContaining({ key: 'X', id: 'stub-id' }));
+
+    const updated = await service.update('X', {} as any);
+    expect(updated).toEqual(expect.objectContaining({ key: 'X' }));
+
+    const archived = await service.archive('X');
+    expect(archived.archivedAt).not.toBeNull();
+
     await expect(service.setOverride('X', {} as any)).resolves.toBeUndefined();
     await expect(service.removeOverride('X', {} as any)).resolves.toBeUndefined();
-    await expect(service.findAll()).resolves.toEqual([]);
-    expect(() => service.invalidateCache()).not.toThrow();
+
+    const all = await service.findAll();
+    expect(all).toHaveLength(1);
+    expect(all[0]).toEqual(expect.objectContaining({ key: 'FEATURE_A' }));
+
+    await expect(service.invalidateCache()).resolves.toBeUndefined();
   });
 
   it('should return flag data from findByKey for registered flags', async () => {

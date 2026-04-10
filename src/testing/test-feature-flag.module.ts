@@ -1,5 +1,26 @@
 import { Module, DynamicModule, NotFoundException } from '@nestjs/common';
 import { FeatureFlagService } from '../services/feature-flag.service';
+import {
+  FeatureFlagWithOverrides,
+  CreateFeatureFlagInput,
+} from '../interfaces/feature-flag.interface';
+
+function makeStubFlag(
+  partial: Partial<FeatureFlagWithOverrides> = {},
+): FeatureFlagWithOverrides {
+  return {
+    id: partial.id ?? 'stub-id',
+    key: partial.key ?? 'STUB',
+    description: partial.description ?? null,
+    enabled: partial.enabled ?? false,
+    percentage: partial.percentage ?? 0,
+    metadata: partial.metadata ?? {},
+    archivedAt: partial.archivedAt ?? null,
+    createdAt: partial.createdAt ?? new Date('2026-01-01'),
+    updatedAt: partial.updatedAt ?? new Date('2026-01-01'),
+    overrides: partial.overrides ?? [],
+  };
+}
 
 @Module({})
 export class TestFeatureFlagModule {
@@ -13,19 +34,25 @@ export class TestFeatureFlagModule {
           useValue: {
             isEnabled: async (key: string) => flags?.[key] ?? false,
             evaluateAll: async () => flags ?? {},
-            create: async () => ({}),
-            update: async () => ({}),
-            archive: async () => ({}),
+            create: async (input: CreateFeatureFlagInput) =>
+              makeStubFlag({ key: input.key, enabled: input.enabled ?? false }),
+            update: async (key: string, input: Partial<FeatureFlagWithOverrides>) =>
+              makeStubFlag({ key, ...input }),
+            archive: async (key: string) =>
+              makeStubFlag({ key, archivedAt: new Date() }),
             setOverride: async () => {},
             removeOverride: async () => {},
-            findAll: async () => [],
+            findAll: async () =>
+              Object.entries(flags ?? {}).map(([key, enabled]) =>
+                makeStubFlag({ key, enabled }),
+              ),
             findByKey: async (key: string) => {
               if (flags && key in flags) {
-                return { key, enabled: flags[key], overrides: [] };
+                return makeStubFlag({ key, enabled: flags[key] });
               }
               throw new NotFoundException(`Feature flag "${key}" not found`);
             },
-            invalidateCache: () => {},
+            invalidateCache: async () => {},
           },
         },
       ],

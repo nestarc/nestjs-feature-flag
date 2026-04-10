@@ -14,7 +14,7 @@ import {
   SetOverrideInput,
   FeatureFlagWithOverrides,
 } from '../interfaces/feature-flag.interface';
-import { RemoveOverrideInput } from '../interfaces/cache-adapter.interface';
+import { RemoveOverrideInput } from '../interfaces/feature-flag.interface';
 
 @Controller()
 export class FeatureFlagAdminController {

@@ -49,3 +49,9 @@ export interface FlagOverride {
   environment: string | null;
   enabled: boolean;
 }
+
+export interface RemoveOverrideInput {
+  tenantId?: string;
+  userId?: string;
+  environment?: string;
+}

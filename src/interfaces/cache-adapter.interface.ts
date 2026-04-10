@@ -8,9 +8,3 @@ export interface CacheAdapter {
   invalidate(key?: string): Promise<void>;
   onModuleDestroy?(): Promise<void>;
 }
-
-export interface RemoveOverrideInput {
-  tenantId?: string;
-  userId?: string;
-  environment?: string;
-}

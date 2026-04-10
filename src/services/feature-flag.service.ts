@@ -1,29 +1,30 @@
-import { Injectable, Inject, Optional, NotFoundException } from '@nestjs/common';
-import { ModuleRef } from '@nestjs/core';
-import { FEATURE_FLAG_MODULE_OPTIONS, CACHE_ADAPTER } from '../feature-flag.constants';
+import { Injectable, Inject, NotFoundException } from '@nestjs/common';
+import { FEATURE_FLAG_MODULE_OPTIONS, CACHE_ADAPTER, FEATURE_FLAG_REPOSITORY } from '../feature-flag.constants';
 import { FeatureFlagModuleOptions } from '../interfaces/feature-flag-options.interface';
 import {
   CreateFeatureFlagInput,
   UpdateFeatureFlagInput,
   SetOverrideInput,
+  RemoveOverrideInput,
   FeatureFlagWithOverrides,
 } from '../interfaces/feature-flag.interface';
 import { EvaluationContext } from '../interfaces/evaluation-context.interface';
-import { CacheAdapter, RemoveOverrideInput } from '../interfaces/cache-adapter.interface';
+import { CacheAdapter } from '../interfaces/cache-adapter.interface';
+import { FeatureFlagRepository } from '../interfaces/feature-flag-repository.interface';
 import { FlagEvaluatorService } from './flag-evaluator.service';
-import { FlagContext } from './flag-context';
+import { FlagContextResolver } from './flag-context-resolver';
+import { FlagEventPublisher } from './flag-event-publisher';
 import { FeatureFlagEvents, FlagEvaluatedEvent } from '../events/feature-flag.events';
 
 @Injectable()
 export class FeatureFlagService {
   constructor(
     @Inject(FEATURE_FLAG_MODULE_OPTIONS) private readonly options: FeatureFlagModuleOptions,
-    @Inject('PRISMA_SERVICE') private readonly prisma: any,
+    @Inject(FEATURE_FLAG_REPOSITORY) private readonly repository: FeatureFlagRepository,
     @Inject(CACHE_ADAPTER) private readonly cacheAdapter: CacheAdapter,
     private readonly evaluator: FlagEvaluatorService,
-    private readonly flagContext: FlagContext,
-    private readonly moduleRef: ModuleRef,
-    @Optional() @Inject('EVENT_EMITTER') private readonly eventEmitter?: any,
+    private readonly contextResolver: FlagContextResolver,
+    private readonly eventPublisher: FlagEventPublisher,
   ) {}
 
   private get cacheTtlMs(): number {
@@ -36,28 +37,25 @@ export class FeatureFlagService {
       return this.options.defaultOnMissing ?? false;
     }
 
-    const context = this.buildContext(explicitContext);
+    const context = this.contextResolver.resolve(explicitContext);
     const startTime = Date.now();
     const { result, source } = this.evaluator.evaluate(flag, context);
     const evaluationTimeMs = Date.now() - startTime;
 
-    if (this.options.emitEvents && this.eventEmitter) {
-      const event: FlagEvaluatedEvent = {
-        flagKey,
-        result,
-        context,
-        source,
-        evaluationTimeMs,
-      };
-      this.eventEmitter.emit(FeatureFlagEvents.EVALUATED, event);
-    }
+    this.eventPublisher.emit(FeatureFlagEvents.EVALUATED, {
+      flagKey,
+      result,
+      context,
+      source,
+      evaluationTimeMs,
+    } satisfies FlagEvaluatedEvent);
 
     return result;
   }
 
   async evaluateAll(explicitContext?: EvaluationContext): Promise<Record<string, boolean>> {
     const flags = await this.resolveAllFlags();
-    const context = this.buildContext(explicitContext);
+    const context = this.contextResolver.resolve(explicitContext);
     const result: Record<string, boolean> = {};
 
     for (const flag of flags) {
@@ -68,121 +66,64 @@ export class FeatureFlagService {
   }
 
   async create(input: CreateFeatureFlagInput): Promise<FeatureFlagWithOverrides> {
-    const flag = await this.prisma.featureFlag.create({
-      data: {
-        key: input.key,
-        description: input.description,
-        enabled: input.enabled ?? false,
-        percentage: input.percentage ?? 0,
-        metadata: input.metadata ?? {},
-      },
-      include: { overrides: true },
-    });
-
+    const flag = await this.repository.createFlag(input);
     await this.cacheAdapter.invalidate();
-
-    if (this.options.emitEvents && this.eventEmitter) {
-      this.eventEmitter.emit(FeatureFlagEvents.CREATED, { flagKey: input.key, action: 'created' });
-    }
-
+    this.eventPublisher.emit(FeatureFlagEvents.CREATED, { flagKey: input.key, action: 'created' });
     return flag;
   }
 
   async update(key: string, input: UpdateFeatureFlagInput): Promise<FeatureFlagWithOverrides> {
-    const flag = await this.prisma.featureFlag.update({
-      where: { key },
-      data: {
-        ...(input.description !== undefined && { description: input.description }),
-        ...(input.enabled !== undefined && { enabled: input.enabled }),
-        ...(input.percentage !== undefined && { percentage: input.percentage }),
-        ...(input.metadata !== undefined && { metadata: input.metadata }),
-      },
-      include: { overrides: true },
-    });
-
+    const flag = await this.repository.updateFlag(key, input);
     await this.cacheAdapter.invalidate(key);
-
-    if (this.options.emitEvents && this.eventEmitter) {
-      this.eventEmitter.emit(FeatureFlagEvents.UPDATED, { flagKey: key, action: 'updated' });
-    }
-
+    this.eventPublisher.emit(FeatureFlagEvents.UPDATED, { flagKey: key, action: 'updated' });
     return flag;
   }
 
   async archive(key: string): Promise<FeatureFlagWithOverrides> {
-    const flag = await this.prisma.featureFlag.update({
-      where: { key },
-      data: { archivedAt: new Date() },
-      include: { overrides: true },
-    });
-
+    const flag = await this.repository.archiveFlag(key);
     await this.cacheAdapter.invalidate(key);
-
-    if (this.options.emitEvents && this.eventEmitter) {
-      this.eventEmitter.emit(FeatureFlagEvents.ARCHIVED, { flagKey: key, action: 'archived' });
-    }
-
+    this.eventPublisher.emit(FeatureFlagEvents.ARCHIVED, { flagKey: key, action: 'archived' });
     return flag;
   }
 
   async setOverride(key: string, input: SetOverrideInput): Promise<void> {
-    const flag = await this.prisma.featureFlag.findUnique({ where: { key } });
-    if (!flag) {
+    const flagId = await this.repository.findFlagIdByKey(key);
+    if (!flagId) {
       throw new NotFoundException(`Feature flag "${key}" not found`);
     }
 
-    const where = {
-      flagId: flag.id,
+    const criteria = {
       tenantId: input.tenantId ?? null,
       userId: input.userId ?? null,
       environment: input.environment ?? null,
     };
 
-    const existing = await this.prisma.featureFlagOverride.findFirst({ where });
-
+    const existing = await this.repository.findOverride(flagId, criteria);
     if (existing) {
-      await this.prisma.featureFlagOverride.update({
-        where: { id: existing.id },
-        data: { enabled: input.enabled },
-      });
+      await this.repository.updateOverrideEnabled(existing.id, input.enabled);
     } else {
-      await this.prisma.featureFlagOverride.create({
-        data: { ...where, enabled: input.enabled },
-      });
+      await this.repository.createOverride(flagId, criteria, input.enabled);
     }
 
     await this.cacheAdapter.invalidate(key);
-
-    if (this.options.emitEvents && this.eventEmitter) {
-      this.eventEmitter.emit(FeatureFlagEvents.OVERRIDE_SET, {
-        flagKey: key,
-        ...input,
-        action: 'set',
-      });
-    }
+    this.eventPublisher.emit(FeatureFlagEvents.OVERRIDE_SET, {
+      flagKey: key,
+      ...input,
+      action: 'set',
+    });
   }
 
   async findAll(): Promise<FeatureFlagWithOverrides[]> {
-    return this.prisma.featureFlag.findMany({
-      where: { archivedAt: null },
-      include: { overrides: true },
-      orderBy: { createdAt: 'desc' },
-    });
+    return this.repository.findAllActiveFlags();
   }
 
   async invalidateCache(): Promise<void> {
     await this.cacheAdapter.invalidate();
-
-    if (this.options.emitEvents && this.eventEmitter) {
-      this.eventEmitter.emit(FeatureFlagEvents.CACHE_INVALIDATED, {});
-    }
+    this.eventPublisher.emit(FeatureFlagEvents.CACHE_INVALIDATED, {});
   }
 
   async findByKey(key: string): Promise<FeatureFlagWithOverrides> {
-    const flag = await this.prisma.featureFlag.findUnique({
-      where: { key },
-      include: { overrides: true },
-    });
+    const flag = await this.repository.findFlagByKey(key);
     if (!flag) {
       throw new NotFoundException(`Feature flag "${key}" not found`);
     }
@@ -190,43 +131,35 @@ export class FeatureFlagService {
   }
 
   async removeOverride(key: string, input: RemoveOverrideInput): Promise<void> {
-    const flag = await this.prisma.featureFlag.findUnique({ where: { key } });
-    if (!flag) {
+    const flagId = await this.repository.findFlagIdByKey(key);
+    if (!flagId) {
       throw new NotFoundException(`Feature flag "${key}" not found`);
     }
 
-    const where = {
-      flagId: flag.id,
+    const criteria = {
       tenantId: input.tenantId ?? null,
       userId: input.userId ?? null,
       environment: input.environment ?? null,
     };
 
-    const existing = await this.prisma.featureFlagOverride.findFirst({ where });
+    const existing = await this.repository.findOverride(flagId, criteria);
     if (existing) {
-      await this.prisma.featureFlagOverride.delete({ where: { id: existing.id } });
+      await this.repository.deleteOverride(existing.id);
     }
 
     await this.cacheAdapter.invalidate(key);
-
-    if (this.options.emitEvents && this.eventEmitter) {
-      this.eventEmitter.emit(FeatureFlagEvents.OVERRIDE_REMOVED, {
-        flagKey: key,
-        ...input,
-        action: 'removed',
-      });
-    }
+    this.eventPublisher.emit(FeatureFlagEvents.OVERRIDE_REMOVED, {
+      flagKey: key,
+      ...input,
+      action: 'removed',
+    });
   }
 
   private async resolveFlag(key: string): Promise<FeatureFlagWithOverrides | null> {
     const cached = await this.cacheAdapter.get(key);
     if (cached) return cached;
 
-    const flag = await this.prisma.featureFlag.findUnique({
-      where: { key },
-      include: { overrides: true },
-    });
-
+    const flag = await this.repository.findFlagByKey(key);
     if (flag) {
       await this.cacheAdapter.set(key, flag, this.cacheTtlMs);
     }
@@ -238,30 +171,8 @@ export class FeatureFlagService {
     const cached = await this.cacheAdapter.getAll();
     if (cached) return cached;
 
-    const flags = await this.prisma.featureFlag.findMany({
-      where: { archivedAt: null },
-      include: { overrides: true },
-    });
-
+    const flags = await this.repository.findAllActiveFlags();
     await this.cacheAdapter.setAll(flags, this.cacheTtlMs);
     return flags;
-  }
-
-  private buildContext(explicit?: EvaluationContext): EvaluationContext {
-    return {
-      userId: explicit?.userId !== undefined ? explicit.userId : this.flagContext.getUserId(),
-      tenantId: explicit?.tenantId !== undefined ? explicit.tenantId : this.getTenantId(),
-      environment: explicit?.environment !== undefined ? explicit.environment : this.options.environment,
-    };
-  }
-
-  private getTenantId(): string | null {
-    try {
-      const { TenancyService } = require('@nestarc/tenancy');
-      const tenancyService = this.moduleRef.get(TenancyService, { strict: false });
-      return tenancyService?.getCurrentTenant() ?? null;
-    } catch {
-      return null;
-    }
   }
 }

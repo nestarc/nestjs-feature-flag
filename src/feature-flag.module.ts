@@ -7,7 +7,12 @@ import {
   RequestMethod,
 } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
-import { FEATURE_FLAG_MODULE_OPTIONS, CACHE_ADAPTER } from './feature-flag.constants';
+import {
+  FEATURE_FLAG_MODULE_OPTIONS,
+  CACHE_ADAPTER,
+  FEATURE_FLAG_REPOSITORY,
+  TENANT_CONTEXT_PROVIDER,
+} from './feature-flag.constants';
 import {
   FeatureFlagModuleAsyncOptions,
   FeatureFlagModuleOptions,
@@ -15,8 +20,12 @@ import {
 } from './interfaces/feature-flag-options.interface';
 import { FeatureFlagService } from './services/feature-flag.service';
 import { MemoryCacheAdapter } from './cache/memory-cache.adapter';
+import { PrismaFeatureFlagRepository } from './repositories/prisma-feature-flag.repository';
+import { DefaultTenantContextProvider } from './services/default-tenant-context-provider';
 import { FlagEvaluatorService } from './services/flag-evaluator.service';
 import { FlagContext } from './services/flag-context';
+import { FlagContextResolver } from './services/flag-context-resolver';
+import { FlagEventPublisher } from './services/flag-event-publisher';
 import { FeatureFlagGuard } from './guards/feature-flag.guard';
 import { FlagContextMiddleware } from './middleware/flag-context.middleware';
 
@@ -35,6 +44,8 @@ const FULL_OPTIONS = Symbol('FEATURE_FLAG_FULL_OPTIONS');
 const coreProviders: Provider[] = [
   FlagEvaluatorService,
   FlagContext,
+  FlagContextResolver,
+  FlagEventPublisher,
   FeatureFlagGuard,
   FeatureFlagService,
 ];
@@ -65,15 +76,29 @@ export class FeatureFlagModule implements NestModule {
       global: true,
       providers: [
         { provide: FEATURE_FLAG_MODULE_OPTIONS, useValue: moduleOptions },
-        { provide: 'PRISMA_SERVICE', useValue: prisma },
         eventProvider,
         {
           provide: CACHE_ADAPTER,
           useValue: options.cacheAdapter ?? new MemoryCacheAdapter(),
         },
+        {
+          provide: FEATURE_FLAG_REPOSITORY,
+          useValue: new PrismaFeatureFlagRepository(prisma),
+        },
+        {
+          provide: TENANT_CONTEXT_PROVIDER,
+          useClass: DefaultTenantContextProvider,
+        },
         ...coreProviders,
       ],
-      exports: [FeatureFlagService, FlagContext, FEATURE_FLAG_MODULE_OPTIONS, CACHE_ADAPTER],
+      exports: [
+        FeatureFlagService,
+        FlagContext,
+        FEATURE_FLAG_MODULE_OPTIONS,
+        CACHE_ADAPTER,
+        FEATURE_FLAG_REPOSITORY,
+        TENANT_CONTEXT_PROVIDER,
+      ],
     };
   }
 
@@ -90,11 +115,6 @@ export class FeatureFlagModule implements NestModule {
           provide: FEATURE_FLAG_MODULE_OPTIONS,
           useFactory: ({ prisma: _, ...moduleOptions }: FeatureFlagModuleRootOptions) =>
             moduleOptions,
-          inject: [FULL_OPTIONS],
-        },
-        {
-          provide: 'PRISMA_SERVICE',
-          useFactory: (full: FeatureFlagModuleRootOptions) => full.prisma,
           inject: [FULL_OPTIONS],
         },
         {
@@ -116,9 +136,26 @@ export class FeatureFlagModule implements NestModule {
             full.cacheAdapter ?? new MemoryCacheAdapter(),
           inject: [FULL_OPTIONS],
         },
+        {
+          provide: FEATURE_FLAG_REPOSITORY,
+          useFactory: (full: FeatureFlagModuleRootOptions) =>
+            new PrismaFeatureFlagRepository(full.prisma),
+          inject: [FULL_OPTIONS],
+        },
+        {
+          provide: TENANT_CONTEXT_PROVIDER,
+          useClass: DefaultTenantContextProvider,
+        },
         ...coreProviders,
       ],
-      exports: [FeatureFlagService, FlagContext, FEATURE_FLAG_MODULE_OPTIONS, CACHE_ADAPTER],
+      exports: [
+        FeatureFlagService,
+        FlagContext,
+        FEATURE_FLAG_MODULE_OPTIONS,
+        CACHE_ADAPTER,
+        FEATURE_FLAG_REPOSITORY,
+        TENANT_CONTEXT_PROVIDER,
+      ],
     };
   }
 

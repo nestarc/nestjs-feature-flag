@@ -1,9 +1,12 @@
 import { NotFoundException } from '@nestjs/common';
 import { FeatureFlagService } from '../../src/services/feature-flag.service';
 import { FlagEvaluatorService } from '../../src/services/flag-evaluator.service';
-import { FlagContext } from '../../src/services/flag-context';
+import { FlagContextResolver } from '../../src/services/flag-context-resolver';
+import { FlagEventPublisher } from '../../src/services/flag-event-publisher';
 import { FeatureFlagModuleOptions } from '../../src/interfaces/feature-flag-options.interface';
 import { FeatureFlagWithOverrides } from '../../src/interfaces/feature-flag.interface';
+import { FeatureFlagRepository } from '../../src/interfaces/feature-flag-repository.interface';
+import { CacheAdapter } from '../../src/interfaces/cache-adapter.interface';
 
 function makeFlagRecord(key: string, overrides: Partial<FeatureFlagWithOverrides> = {}): FeatureFlagWithOverrides {
   return {
@@ -24,17 +27,15 @@ function makeFlagRecord(key: string, overrides: Partial<FeatureFlagWithOverrides
 describe('FeatureFlagService', () => {
   let service: FeatureFlagService;
   let evaluator: FlagEvaluatorService;
-  let context: FlagContext;
-  let mockPrisma: any;
-  let mockModuleRef: any;
-  let mockEventEmitter: any;
+  let mockRepository: jest.Mocked<FeatureFlagRepository>;
+  let mockContextResolver: jest.Mocked<Pick<FlagContextResolver, 'resolve'>>;
+  let mockEventPublisher: jest.Mocked<Pick<FlagEventPublisher, 'emit'>>;
   let options: FeatureFlagModuleOptions;
-  let mockCacheAdapter: any;
+  let mockCacheAdapter: jest.Mocked<CacheAdapter>;
 
   beforeEach(() => {
     options = { environment: 'test', cacheTtlMs: 5000 };
     evaluator = new FlagEvaluatorService();
-    context = new FlagContext();
 
     mockCacheAdapter = {
       get: jest.fn().mockResolvedValue(null),
@@ -44,45 +45,40 @@ describe('FeatureFlagService', () => {
       invalidate: jest.fn().mockResolvedValue(undefined),
     };
 
-    mockPrisma = {
-      featureFlag: {
-        findUnique: jest.fn(),
-        findMany: jest.fn(),
-        create: jest.fn(),
-        update: jest.fn(),
-      },
-      featureFlagOverride: {
-        upsert: jest.fn(),
-        deleteMany: jest.fn(),
-        findFirst: jest.fn(),
-        create: jest.fn(),
-        update: jest.fn(),
-        delete: jest.fn(),
-      },
+    mockRepository = {
+      createFlag: jest.fn(),
+      updateFlag: jest.fn(),
+      archiveFlag: jest.fn(),
+      findFlagByKey: jest.fn(),
+      findFlagIdByKey: jest.fn(),
+      findAllActiveFlags: jest.fn(),
+      findOverride: jest.fn(),
+      createOverride: jest.fn(),
+      updateOverrideEnabled: jest.fn(),
+      deleteOverride: jest.fn(),
     };
 
-    mockModuleRef = {
-      get: jest.fn().mockReturnValue(undefined),
+    mockContextResolver = {
+      resolve: jest.fn().mockReturnValue({ environment: 'test' }),
     };
 
-    mockEventEmitter = {
+    mockEventPublisher = {
       emit: jest.fn(),
     };
 
     service = new FeatureFlagService(
       options,
-      mockPrisma,
+      mockRepository,
       mockCacheAdapter,
       evaluator,
-      context,
-      mockModuleRef,
-      mockEventEmitter,
+      mockContextResolver as any,
+      mockEventPublisher as any,
     );
   });
 
   describe('isEnabled', () => {
     it('should return defaultOnMissing when flag does not exist', async () => {
-      mockPrisma.featureFlag.findUnique.mockResolvedValue(null);
+      mockRepository.findFlagByKey.mockResolvedValue(null);
       const result = await service.isEnabled('UNKNOWN');
       expect(result).toBe(false);
     });
@@ -90,28 +86,24 @@ describe('FeatureFlagService', () => {
     it('should return defaultOnMissing=true when configured', async () => {
       const serviceWithDefault = new FeatureFlagService(
         { ...options, defaultOnMissing: true },
-        mockPrisma,
+        mockRepository,
         mockCacheAdapter,
         evaluator,
-        context,
-        mockModuleRef,
-        mockEventEmitter,
+        mockContextResolver as any,
+        mockEventPublisher as any,
       );
-      mockPrisma.featureFlag.findUnique.mockResolvedValue(null);
+      mockRepository.findFlagByKey.mockResolvedValue(null);
       const result = await serviceWithDefault.isEnabled('UNKNOWN');
       expect(result).toBe(true);
     });
 
     it('should evaluate flag from DB when cache misses', async () => {
       const flag = makeFlagRecord('MY_FLAG', { enabled: true });
-      mockPrisma.featureFlag.findUnique.mockResolvedValue(flag);
+      mockRepository.findFlagByKey.mockResolvedValue(flag);
 
       const result = await service.isEnabled('MY_FLAG');
       expect(result).toBe(true);
-      expect(mockPrisma.featureFlag.findUnique).toHaveBeenCalledWith({
-        where: { key: 'MY_FLAG' },
-        include: { overrides: true },
-      });
+      expect(mockRepository.findFlagByKey).toHaveBeenCalledWith('MY_FLAG');
       expect(mockCacheAdapter.set).toHaveBeenCalledWith('MY_FLAG', flag, 5000);
     });
 
@@ -121,7 +113,7 @@ describe('FeatureFlagService', () => {
 
       const result = await service.isEnabled('MY_FLAG');
       expect(result).toBe(true);
-      expect(mockPrisma.featureFlag.findUnique).not.toHaveBeenCalled();
+      expect(mockRepository.findFlagByKey).not.toHaveBeenCalled();
     });
 
     it('should use explicit context when provided', async () => {
@@ -131,10 +123,12 @@ describe('FeatureFlagService', () => {
           userId: 'user-1', environment: null, enabled: true,
         }],
       });
-      mockPrisma.featureFlag.findUnique.mockResolvedValue(flag);
+      mockRepository.findFlagByKey.mockResolvedValue(flag);
+      mockContextResolver.resolve.mockReturnValue({ userId: 'user-1' });
 
       const result = await service.isEnabled('MY_FLAG', { userId: 'user-1' });
       expect(result).toBe(true);
+      expect(mockContextResolver.resolve).toHaveBeenCalledWith({ userId: 'user-1' });
     });
 
     it('should use explicit null userId to override ambient context', async () => {
@@ -145,12 +139,12 @@ describe('FeatureFlagService', () => {
           userId: 'ambient-user', environment: null, enabled: true,
         }],
       });
-      mockPrisma.featureFlag.findUnique.mockResolvedValue(flag);
+      mockRepository.findFlagByKey.mockResolvedValue(flag);
 
-      // Set ambient user via FlagContext
-      const result = await context.run({ userId: 'ambient-user' }, () =>
-        service.isEnabled('MY_FLAG', { userId: null }),
-      );
+      // Simulate contextResolver returning context with null userId (explicit null suppresses ambient)
+      mockContextResolver.resolve.mockReturnValue({ userId: null });
+
+      const result = await service.isEnabled('MY_FLAG', { userId: null });
       // Explicit null should suppress the ambient userId, so user override won't match
       expect(result).toBe(false);
     });
@@ -162,7 +156,8 @@ describe('FeatureFlagService', () => {
           userId: null, environment: 'test', enabled: true,
         }],
       });
-      mockPrisma.featureFlag.findUnique.mockResolvedValue(flag);
+      mockRepository.findFlagByKey.mockResolvedValue(flag);
+      mockContextResolver.resolve.mockReturnValue({ environment: 'test' });
 
       const result = await service.isEnabled('MY_FLAG');
       expect(result).toBe(true);
@@ -171,7 +166,7 @@ describe('FeatureFlagService', () => {
 
   describe('evaluateAll', () => {
     it('should return a map of all active flags', async () => {
-      mockPrisma.featureFlag.findMany.mockResolvedValue([
+      mockRepository.findAllActiveFlags.mockResolvedValue([
         makeFlagRecord('FLAG_A', { enabled: true }),
         makeFlagRecord('FLAG_B', { enabled: false }),
       ]);
@@ -188,14 +183,14 @@ describe('FeatureFlagService', () => {
 
       const result = await service.evaluateAll();
       expect(result).toEqual({ FLAG_A: true });
-      expect(mockPrisma.featureFlag.findMany).not.toHaveBeenCalled();
+      expect(mockRepository.findAllActiveFlags).not.toHaveBeenCalled();
     });
   });
 
   describe('create', () => {
     it('should create a flag and invalidate cache', async () => {
       const created = makeFlagRecord('NEW_FLAG', { enabled: true });
-      mockPrisma.featureFlag.create.mockResolvedValue(created);
+      mockRepository.createFlag.mockResolvedValue(created);
 
       const result = await service.create({
         key: 'NEW_FLAG',
@@ -203,7 +198,7 @@ describe('FeatureFlagService', () => {
       });
 
       expect(result.key).toBe('NEW_FLAG');
-      expect(mockPrisma.featureFlag.create).toHaveBeenCalled();
+      expect(mockRepository.createFlag).toHaveBeenCalled();
       expect(mockCacheAdapter.invalidate).toHaveBeenCalled();
     });
   });
@@ -211,7 +206,7 @@ describe('FeatureFlagService', () => {
   describe('update', () => {
     it('should update a flag and invalidate cache', async () => {
       const updated = makeFlagRecord('MY_FLAG', { enabled: true });
-      mockPrisma.featureFlag.update.mockResolvedValue(updated);
+      mockRepository.updateFlag.mockResolvedValue(updated);
 
       const result = await service.update('MY_FLAG', { enabled: true });
       expect(result.enabled).toBe(true);
@@ -222,7 +217,7 @@ describe('FeatureFlagService', () => {
   describe('archive', () => {
     it('should soft-delete a flag by setting archivedAt', async () => {
       const archived = makeFlagRecord('OLD_FLAG', { archivedAt: new Date() });
-      mockPrisma.featureFlag.update.mockResolvedValue(archived);
+      mockRepository.archiveFlag.mockResolvedValue(archived);
 
       const result = await service.archive('OLD_FLAG');
       expect(result.archivedAt).not.toBeNull();
@@ -231,99 +226,66 @@ describe('FeatureFlagService', () => {
 
   describe('setOverride', () => {
     it('should upsert a tenant override', async () => {
-      mockPrisma.featureFlag.findUnique.mockResolvedValue(makeFlagRecord('MY_FLAG'));
-      mockPrisma.featureFlagOverride.findFirst.mockResolvedValue(null);
-      mockPrisma.featureFlagOverride.create.mockResolvedValue({
-        id: 'o1',
-        flagId: 'uuid-1',
-        tenantId: 'tenant-1',
-        userId: null,
-        environment: null,
-        enabled: true,
-      });
+      mockRepository.findFlagIdByKey.mockResolvedValue('uuid-1');
+      mockRepository.findOverride.mockResolvedValue(null);
+      mockRepository.createOverride.mockResolvedValue(undefined);
 
       await service.setOverride('MY_FLAG', {
         tenantId: 'tenant-1',
         enabled: true,
       });
 
-      expect(mockPrisma.featureFlagOverride.findFirst).toHaveBeenCalled();
-      expect(mockPrisma.featureFlagOverride.create).toHaveBeenCalled();
+      expect(mockRepository.findOverride).toHaveBeenCalled();
+      expect(mockRepository.createOverride).toHaveBeenCalled();
     });
 
     it('should update existing override instead of creating a duplicate', async () => {
-      const existingOverride = {
-        id: 'existing-1',
-        flagId: 'uuid-1',
-        tenantId: null,
-        userId: null,
-        environment: null,
-        enabled: false,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
+      const existingOverride = { id: 'existing-1' };
 
-      mockPrisma.featureFlag.findUnique.mockResolvedValue(makeFlagRecord('MY_FLAG'));
-      mockPrisma.featureFlagOverride.findFirst.mockResolvedValue(existingOverride);
-      mockPrisma.featureFlagOverride.update.mockResolvedValue({
-        ...existingOverride,
-        enabled: true,
-      });
+      mockRepository.findFlagIdByKey.mockResolvedValue('uuid-1');
+      mockRepository.findOverride.mockResolvedValue(existingOverride);
+      mockRepository.updateOverrideEnabled.mockResolvedValue(undefined);
 
       await service.setOverride('MY_FLAG', { enabled: true });
 
-      expect(mockPrisma.featureFlagOverride.findFirst).toHaveBeenCalledWith({
-        where: {
-          flagId: 'uuid-1',
+      expect(mockRepository.findOverride).toHaveBeenCalledWith(
+        'uuid-1',
+        {
           tenantId: null,
           userId: null,
           environment: null,
         },
-      });
-      expect(mockPrisma.featureFlagOverride.update).toHaveBeenCalledWith({
-        where: { id: 'existing-1' },
-        data: { enabled: true },
-      });
+      );
+      expect(mockRepository.updateOverrideEnabled).toHaveBeenCalledWith('existing-1', true);
     });
 
     it('should create a new override when none exists', async () => {
-      mockPrisma.featureFlag.findUnique.mockResolvedValue(makeFlagRecord('MY_FLAG'));
-      mockPrisma.featureFlagOverride.findFirst.mockResolvedValue(null);
-      mockPrisma.featureFlagOverride.create.mockResolvedValue({
-        id: 'new-1',
-        flagId: 'uuid-1',
-        tenantId: 'tenant-1',
-        userId: null,
-        environment: null,
-        enabled: true,
-      });
+      mockRepository.findFlagIdByKey.mockResolvedValue('uuid-1');
+      mockRepository.findOverride.mockResolvedValue(null);
+      mockRepository.createOverride.mockResolvedValue(undefined);
 
       await service.setOverride('MY_FLAG', { tenantId: 'tenant-1', enabled: true });
 
-      expect(mockPrisma.featureFlagOverride.create).toHaveBeenCalledWith({
-        data: {
-          flagId: 'uuid-1',
+      expect(mockRepository.createOverride).toHaveBeenCalledWith(
+        'uuid-1',
+        {
           tenantId: 'tenant-1',
           userId: null,
           environment: null,
-          enabled: true,
         },
-      });
+        true,
+      );
     });
   });
 
   describe('findAll', () => {
     it('should return all active (non-archived) flags', async () => {
       const flags = [makeFlagRecord('A'), makeFlagRecord('B')];
-      mockPrisma.featureFlag.findMany.mockResolvedValue(flags);
+      mockRepository.findAllActiveFlags.mockResolvedValue(flags);
 
       const result = await service.findAll();
       expect(result).toHaveLength(2);
-      expect(mockPrisma.featureFlag.findMany).toHaveBeenCalledWith({
-        where: { archivedAt: null },
-        include: { overrides: true },
-        orderBy: { createdAt: 'desc' },
-      });
+      expect(mockRepository.findAllActiveFlags).toHaveBeenCalled();
     });
   });
 
@@ -337,79 +299,67 @@ describe('FeatureFlagService', () => {
   describe('findByKey', () => {
     it('should return the flag when found', async () => {
       const mockFlagData = makeFlagRecord('TEST');
-      mockPrisma.featureFlag.findUnique.mockResolvedValue(mockFlagData);
+      mockRepository.findFlagByKey.mockResolvedValue(mockFlagData);
       const result = await service.findByKey('TEST');
       expect(result).toEqual(mockFlagData);
     });
 
     it('should throw NotFoundException when not found', async () => {
-      mockPrisma.featureFlag.findUnique.mockResolvedValue(null);
+      mockRepository.findFlagByKey.mockResolvedValue(null);
       await expect(service.findByKey('MISSING')).rejects.toThrow(NotFoundException);
     });
   });
 
   describe('removeOverride', () => {
     it('should delete existing override and invalidate cache', async () => {
-      mockPrisma.featureFlag.findUnique.mockResolvedValue({ id: 'flag-1' });
-      mockPrisma.featureFlagOverride.findFirst.mockResolvedValue({ id: 'ov-1' });
-      mockPrisma.featureFlagOverride.delete.mockResolvedValue({});
+      mockRepository.findFlagIdByKey.mockResolvedValue('flag-1');
+      mockRepository.findOverride.mockResolvedValue({ id: 'ov-1' });
+      mockRepository.deleteOverride.mockResolvedValue(undefined);
 
       await service.removeOverride('TEST', { tenantId: 't-1' });
 
-      expect(mockPrisma.featureFlagOverride.delete).toHaveBeenCalledWith({ where: { id: 'ov-1' } });
+      expect(mockRepository.deleteOverride).toHaveBeenCalledWith('ov-1');
       expect(mockCacheAdapter.invalidate).toHaveBeenCalledWith('TEST');
     });
 
     it('should throw NotFoundException when flag not found', async () => {
-      mockPrisma.featureFlag.findUnique.mockResolvedValue(null);
+      mockRepository.findFlagIdByKey.mockResolvedValue(null);
       await expect(service.removeOverride('MISSING', {})).rejects.toThrow(NotFoundException);
     });
 
     it('should not fail when override does not exist', async () => {
-      mockPrisma.featureFlag.findUnique.mockResolvedValue({ id: 'flag-1' });
-      mockPrisma.featureFlagOverride.findFirst.mockResolvedValue(null);
+      mockRepository.findFlagIdByKey.mockResolvedValue('flag-1');
+      mockRepository.findOverride.mockResolvedValue(null);
 
       await expect(service.removeOverride('TEST', {})).resolves.not.toThrow();
     });
   });
 
   describe('event emission', () => {
-    let serviceWithEvents: FeatureFlagService;
+    it('should emit evaluation event on isEnabled', async () => {
+      const flag = makeFlagRecord('MY_FLAG', { enabled: true });
+      mockRepository.findFlagByKey.mockResolvedValue(flag);
 
-    beforeEach(() => {
-      serviceWithEvents = new FeatureFlagService(
-        { ...options, emitEvents: true },
-        mockPrisma,
-        mockCacheAdapter,
-        evaluator,
-        context,
-        mockModuleRef,
-        mockEventEmitter,
+      await service.isEnabled('MY_FLAG');
+      expect(mockEventPublisher.emit).toHaveBeenCalledWith(
+        'feature-flag.evaluated',
+        expect.objectContaining({ flagKey: 'MY_FLAG', result: true }),
       );
     });
 
-    it('should emit evaluation event when emitEvents is true', async () => {
-      const flag = makeFlagRecord('MY_FLAG', { enabled: true });
-      mockPrisma.featureFlag.findUnique.mockResolvedValue(flag);
+    it('should not emit evaluation event when flag not found', async () => {
+      mockRepository.findFlagByKey.mockResolvedValue(null);
 
-      await serviceWithEvents.isEnabled('MY_FLAG');
-      expect(mockEventEmitter.emit).toHaveBeenCalled();
-    });
-
-    it('should not emit events when emitEvents is false', async () => {
-      const flag = makeFlagRecord('MY_FLAG', { enabled: true });
-      mockPrisma.featureFlag.findUnique.mockResolvedValue(flag);
-
-      await service.isEnabled('MY_FLAG');
-      expect(mockEventEmitter.emit).not.toHaveBeenCalled();
+      await service.isEnabled('UNKNOWN');
+      expect(mockEventPublisher.emit).not.toHaveBeenCalled();
     });
 
     it('should emit CREATED event on create', async () => {
       const created = makeFlagRecord('NEW_FLAG', { enabled: true });
-      mockPrisma.featureFlag.create.mockResolvedValue(created);
+      mockRepository.createFlag.mockResolvedValue(created);
 
-      await serviceWithEvents.create({ key: 'NEW_FLAG', enabled: true });
-      expect(mockEventEmitter.emit).toHaveBeenCalledWith(
+      await service.create({ key: 'NEW_FLAG', enabled: true });
+      expect(mockEventPublisher.emit).toHaveBeenCalledWith(
         expect.stringContaining('created'),
         expect.objectContaining({ flagKey: 'NEW_FLAG', action: 'created' }),
       );
@@ -417,10 +367,10 @@ describe('FeatureFlagService', () => {
 
     it('should emit UPDATED event on update', async () => {
       const updated = makeFlagRecord('MY_FLAG', { enabled: false });
-      mockPrisma.featureFlag.update.mockResolvedValue(updated);
+      mockRepository.updateFlag.mockResolvedValue(updated);
 
-      await serviceWithEvents.update('MY_FLAG', { enabled: false });
-      expect(mockEventEmitter.emit).toHaveBeenCalledWith(
+      await service.update('MY_FLAG', { enabled: false });
+      expect(mockEventPublisher.emit).toHaveBeenCalledWith(
         expect.stringContaining('updated'),
         expect.objectContaining({ flagKey: 'MY_FLAG', action: 'updated' }),
       );
@@ -428,30 +378,42 @@ describe('FeatureFlagService', () => {
 
     it('should emit ARCHIVED event on archive', async () => {
       const archived = makeFlagRecord('OLD_FLAG', { archivedAt: new Date() });
-      mockPrisma.featureFlag.update.mockResolvedValue(archived);
+      mockRepository.archiveFlag.mockResolvedValue(archived);
 
-      await serviceWithEvents.archive('OLD_FLAG');
-      expect(mockEventEmitter.emit).toHaveBeenCalledWith(
+      await service.archive('OLD_FLAG');
+      expect(mockEventPublisher.emit).toHaveBeenCalledWith(
         expect.stringContaining('archived'),
         expect.objectContaining({ flagKey: 'OLD_FLAG', action: 'archived' }),
       );
     });
 
     it('should emit OVERRIDE_SET event on setOverride', async () => {
-      mockPrisma.featureFlag.findUnique.mockResolvedValue(makeFlagRecord('MY_FLAG'));
-      mockPrisma.featureFlagOverride.findFirst.mockResolvedValue(null);
-      mockPrisma.featureFlagOverride.create.mockResolvedValue({});
+      mockRepository.findFlagIdByKey.mockResolvedValue('uuid-1');
+      mockRepository.findOverride.mockResolvedValue(null);
+      mockRepository.createOverride.mockResolvedValue(undefined);
 
-      await serviceWithEvents.setOverride('MY_FLAG', { tenantId: 'tenant-1', enabled: true });
-      expect(mockEventEmitter.emit).toHaveBeenCalledWith(
+      await service.setOverride('MY_FLAG', { tenantId: 'tenant-1', enabled: true });
+      expect(mockEventPublisher.emit).toHaveBeenCalledWith(
         expect.stringContaining('override'),
         expect.objectContaining({ flagKey: 'MY_FLAG', action: 'set' }),
       );
     });
 
+    it('should emit OVERRIDE_REMOVED event on removeOverride', async () => {
+      mockRepository.findFlagIdByKey.mockResolvedValue('flag-1');
+      mockRepository.findOverride.mockResolvedValue({ id: 'ov-1' });
+      mockRepository.deleteOverride.mockResolvedValue(undefined);
+
+      await service.removeOverride('MY_FLAG', { tenantId: 'tenant-1' });
+      expect(mockEventPublisher.emit).toHaveBeenCalledWith(
+        expect.stringContaining('override'),
+        expect.objectContaining({ flagKey: 'MY_FLAG', action: 'removed' }),
+      );
+    });
+
     it('should emit CACHE_INVALIDATED event on invalidateCache', async () => {
-      await serviceWithEvents.invalidateCache();
-      expect(mockEventEmitter.emit).toHaveBeenCalledWith(
+      await service.invalidateCache();
+      expect(mockEventPublisher.emit).toHaveBeenCalledWith(
         expect.stringContaining('cache'),
         expect.any(Object),
       );
@@ -460,7 +422,7 @@ describe('FeatureFlagService', () => {
 
   describe('setOverride error handling', () => {
     it('should throw when flag is not found', async () => {
-      mockPrisma.featureFlag.findUnique.mockResolvedValue(null);
+      mockRepository.findFlagIdByKey.mockResolvedValue(null);
 
       await expect(service.setOverride('MISSING', { enabled: true })).rejects.toThrow(
         'Feature flag "MISSING" not found',
@@ -468,13 +430,9 @@ describe('FeatureFlagService', () => {
     });
   });
 
-  describe('getTenantId', () => {
-    it('should return tenantId from TenancyService when available', async () => {
-      const mockTenancyService = { getCurrentTenant: jest.fn().mockReturnValue('tenant-xyz') };
-      mockModuleRef.get.mockReturnValue(mockTenancyService);
-
-      // Use jest.mock to simulate @nestarc/tenancy being resolvable
-      jest.doMock('@nestarc/tenancy', () => ({ TenancyService: class TenancyService {} }), { virtual: true });
+  describe('context resolution', () => {
+    it('should delegate context resolution to FlagContextResolver', async () => {
+      mockContextResolver.resolve.mockReturnValue({ tenantId: 'tenant-xyz', environment: 'test' });
 
       const flag = makeFlagRecord('MY_FLAG', {
         overrides: [{
@@ -482,11 +440,11 @@ describe('FeatureFlagService', () => {
           userId: null, environment: null, enabled: true,
         }],
       });
-      mockPrisma.featureFlag.findUnique.mockResolvedValue(flag);
+      mockRepository.findFlagByKey.mockResolvedValue(flag);
 
       const result = await service.isEnabled('MY_FLAG');
-      // Result depends on whether module resolution works in test; just verify no throw
-      expect(typeof result).toBe('boolean');
+      expect(result).toBe(true);
+      expect(mockContextResolver.resolve).toHaveBeenCalled();
     });
   });
 });

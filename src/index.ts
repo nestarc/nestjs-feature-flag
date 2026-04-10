@@ -23,6 +23,7 @@ export {
   CreateFeatureFlagInput,
   UpdateFeatureFlagInput,
   SetOverrideInput,
+  RemoveOverrideInput,
   FeatureFlagGuardOptions,
   FeatureFlagWithOverrides,
   FlagOverride,
@@ -37,13 +38,24 @@ export {
 } from './events/feature-flag.events';
 
 // Constants
-export { FEATURE_FLAG_MODULE_OPTIONS } from './feature-flag.constants';
-export { CACHE_ADAPTER } from './feature-flag.constants';
+export {
+  FEATURE_FLAG_MODULE_OPTIONS,
+  CACHE_ADAPTER,
+  FEATURE_FLAG_REPOSITORY,
+  TENANT_CONTEXT_PROVIDER,
+} from './feature-flag.constants';
 
 // Cache adapters
-export type { CacheAdapter, RemoveOverrideInput } from './interfaces/cache-adapter.interface';
+export type { CacheAdapter } from './interfaces/cache-adapter.interface';
 export { MemoryCacheAdapter } from './cache/memory-cache.adapter';
 export { RedisCacheAdapter, type RedisCacheAdapterOptions } from './cache/redis-cache.adapter';
+
+// Repository
+export type { FeatureFlagRepository, OverrideCriteria } from './interfaces/feature-flag-repository.interface';
+export { PrismaFeatureFlagRepository } from './repositories/prisma-feature-flag.repository';
+
+// Tenant context
+export type { TenantContextProvider } from './interfaces/tenant-context-provider.interface';
 
 // Admin module
 export { FeatureFlagAdminModule } from './admin/feature-flag-admin.module';
