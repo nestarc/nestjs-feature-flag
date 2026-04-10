@@ -1,8 +1,6 @@
 import { DynamicModule, Module } from '@nestjs/common';
-import { ModuleRef } from '@nestjs/core';
 import { FeatureFlagAdminController } from './feature-flag-admin.controller';
 import { FeatureFlagAdminOptions } from './admin-options.interface';
-import { FeatureFlagService } from '../services/feature-flag.service';
 
 @Module({})
 export class FeatureFlagAdminModule {
@@ -22,15 +20,7 @@ export class FeatureFlagAdminModule {
     return {
       module: FeatureFlagAdminModule,
       controllers: [FeatureFlagAdminController],
-      providers: [
-        options.guard,
-        {
-          provide: FeatureFlagService,
-          useFactory: (moduleRef: ModuleRef) =>
-            moduleRef.get(FeatureFlagService, { strict: false }),
-          inject: [ModuleRef],
-        },
-      ],
+      providers: [options.guard],
     };
   }
 }

@@ -1,28 +1,22 @@
-import { INestApplication } from '@nestjs/common';
+import { INestApplication, CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { FeatureFlagModule } from '../../src/feature-flag.module';
-import { FeatureFlagAdminController } from '../../src/admin/feature-flag-admin.controller';
+import { FeatureFlagAdminModule } from '../../src/admin/feature-flag-admin.module';
 import { getPrisma, cleanDatabase, disconnectPrisma } from './helpers/prisma-test.helper';
 
-/**
- * Wire the admin controller directly into the global module's scope.
- *
- * FeatureFlagAdminModule.register() uses ModuleRef.get() to bridge the
- * FeatureFlagService across module boundaries. In @nestjs/testing this can
- * fail due to module initialization ordering differences. By registering
- * the controller alongside the global FeatureFlagModule and manually
- * setting its route prefix, we test the same HTTP endpoints with the
- * real service instance that forRoot() provides.
- */
+@Injectable()
+class NoopGuard implements CanActivate {
+  canActivate(_context: ExecutionContext): boolean {
+    return true;
+  }
+}
+
 describe('FeatureFlagAdmin REST (e2e)', () => {
   let app: INestApplication;
   const prisma = getPrisma();
 
   beforeAll(async () => {
-    // Set the controller path — normally done by FeatureFlagAdminModule.register()
-    Reflect.defineMetadata('path', 'feature-flags', FeatureFlagAdminController);
-
     const module = await Test.createTestingModule({
       imports: [
         FeatureFlagModule.forRoot({
@@ -30,8 +24,11 @@ describe('FeatureFlagAdmin REST (e2e)', () => {
           prisma,
           cacheTtlMs: 0,
         }),
+        FeatureFlagAdminModule.register({
+          guard: NoopGuard,
+          path: 'feature-flags',
+        }),
       ],
-      controllers: [FeatureFlagAdminController],
     }).compile();
 
     app = module.createNestApplication();
