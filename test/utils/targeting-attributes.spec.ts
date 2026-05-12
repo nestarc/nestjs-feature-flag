@@ -32,6 +32,12 @@ describe('targeting attributes utilities', () => {
       expect(isTargetingAttributes({ tenantId: 't-1', plan: 'pro', beta: true })).toBe(true);
     });
 
+    it('accepts null-prototype objects with primitive values', () => {
+      const attributes = Object.assign(Object.create(null), { tenantId: 't-1' });
+
+      expect(isTargetingAttributes(attributes)).toBe(true);
+    });
+
     it('rejects empty objects when allowEmpty is false', () => {
       expect(isTargetingAttributes({}, { allowEmpty: false })).toBe(false);
     });
