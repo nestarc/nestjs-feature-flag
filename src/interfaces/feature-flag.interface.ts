@@ -1,3 +1,6 @@
+export type TargetingAttributeValue = string | number | boolean | null;
+export type TargetingAttributes = Record<string, TargetingAttributeValue>;
+
 export interface CreateFeatureFlagInput {
   key: string;
   description?: string;
