@@ -19,6 +19,12 @@ describe('targeting attributes utilities', () => {
       expect(isTargetingAttributeValue({ country: 'KR' })).toBe(false);
       expect(isTargetingAttributeValue(undefined)).toBe(false);
     });
+
+    it('rejects non-finite numbers', () => {
+      expect(isTargetingAttributeValue(NaN)).toBe(false);
+      expect(isTargetingAttributeValue(Infinity)).toBe(false);
+      expect(isTargetingAttributeValue(-Infinity)).toBe(false);
+    });
   });
 
   describe('isTargetingAttributes', () => {
@@ -37,6 +43,12 @@ describe('targeting attributes utilities', () => {
     it('rejects arrays and nested objects', () => {
       expect(isTargetingAttributes(['tenantId'])).toBe(false);
       expect(isTargetingAttributes({ plan: { name: 'pro' } })).toBe(false);
+    });
+
+    it('rejects attributes with non-finite number values', () => {
+      expect(isTargetingAttributes({ rollout: NaN })).toBe(false);
+      expect(isTargetingAttributes({ rollout: Infinity })).toBe(false);
+      expect(isTargetingAttributes({ rollout: -Infinity })).toBe(false);
     });
   });
 

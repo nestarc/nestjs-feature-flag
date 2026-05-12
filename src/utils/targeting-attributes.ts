@@ -14,7 +14,7 @@ export function isTargetingAttributeValue(value: unknown): value is TargetingAtt
   return (
     value === null ||
     typeof value === 'string' ||
-    typeof value === 'number' ||
+    (typeof value === 'number' && Number.isFinite(value)) ||
     typeof value === 'boolean'
   );
 }
