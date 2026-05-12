@@ -93,6 +93,63 @@ describe('FlagContextResolver', () => {
     });
   });
 
+  describe('attribute normalization', () => {
+    it('should include explicit generic attributes', () => {
+      const result = resolver.resolve({
+        attributes: {
+          country: 'KR',
+          plan: 'pro',
+        },
+      });
+
+      expect(result.attributes).toEqual({
+        country: 'KR',
+        plan: 'pro',
+        userId: 'ambient-user',
+        tenantId: 'ambient-tenant',
+        environment: 'production',
+      });
+    });
+
+    it('should let top-level legacy fields win over attributes with the same key', () => {
+      const result = resolver.resolve({
+        userId: 'explicit-user',
+        tenantId: 'explicit-tenant',
+        environment: 'staging',
+        attributes: {
+          userId: 'attribute-user',
+          tenantId: 'attribute-tenant',
+          environment: 'attribute-env',
+          plan: 'pro',
+        },
+      });
+
+      expect(result.attributes).toEqual({
+        userId: 'explicit-user',
+        tenantId: 'explicit-tenant',
+        environment: 'staging',
+        plan: 'pro',
+      });
+    });
+
+    it('should preserve explicit null userId and tenantId in attributes', () => {
+      const result = resolver.resolve({
+        userId: null,
+        tenantId: null,
+        attributes: {
+          plan: 'free',
+        },
+      });
+
+      expect(result.attributes).toEqual({
+        plan: 'free',
+        userId: null,
+        tenantId: null,
+        environment: 'production',
+      });
+    });
+  });
+
   describe('combined resolution', () => {
     it('should resolve all fields from explicit context', () => {
       const result = resolver.resolve({
@@ -105,6 +162,11 @@ describe('FlagContextResolver', () => {
         userId: 'u1',
         tenantId: 't1',
         environment: 'dev',
+        attributes: {
+          userId: 'u1',
+          tenantId: 't1',
+          environment: 'dev',
+        },
       });
     });
 
@@ -115,6 +177,11 @@ describe('FlagContextResolver', () => {
         userId: 'ambient-user',
         tenantId: 'ambient-tenant',
         environment: 'production',
+        attributes: {
+          userId: 'ambient-user',
+          tenantId: 'ambient-tenant',
+          environment: 'production',
+        },
       });
     });
   });

@@ -14,10 +14,25 @@ export class FlagContextResolver {
   ) {}
 
   resolve(explicit?: EvaluationContext): EvaluationContext {
+    const userId =
+      explicit?.userId !== undefined ? explicit.userId : this.flagContext.getUserId();
+    const tenantId =
+      explicit?.tenantId !== undefined
+        ? explicit.tenantId
+        : this.tenantProvider.getCurrentTenantId();
+    const environment =
+      explicit?.environment !== undefined ? explicit.environment : this.options.environment;
+
     return {
-      userId: explicit?.userId !== undefined ? explicit.userId : this.flagContext.getUserId(),
-      tenantId: explicit?.tenantId !== undefined ? explicit.tenantId : this.tenantProvider.getCurrentTenantId(),
-      environment: explicit?.environment !== undefined ? explicit.environment : this.options.environment,
+      userId,
+      tenantId,
+      environment,
+      attributes: {
+        ...(explicit?.attributes ?? {}),
+        ...(userId !== undefined && { userId }),
+        ...(tenantId !== undefined && { tenantId }),
+        ...(environment !== undefined && { environment }),
+      },
     };
   }
 }
