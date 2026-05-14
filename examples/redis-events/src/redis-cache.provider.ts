@@ -8,7 +8,6 @@ export class RedisCacheProvider implements OnModuleDestroy {
   readonly adapter = new RedisCacheAdapter({ client: this.client });
 
   async onModuleDestroy(): Promise<void> {
-    await this.adapter.onModuleDestroy?.();
     await this.client.quit();
   }
 }

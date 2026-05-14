@@ -4,7 +4,7 @@ This example wires `RedisCacheAdapter` for multi-instance cache invalidation and
 
 The `file:../..` dependency is for running this example inside the repository. If you copy it into another project, replace it with the published `@nestarc/feature-flag` version.
 
-This example uses this package's Prisma schema and migrations. Set `DATABASE_URL`, run `npx prisma migrate deploy`, and generate the client with `npx prisma generate` before starting the app.
+This example uses this package's Prisma schema and migrations through `prisma.config.ts`. Set `DATABASE_URL`, run `npx prisma migrate deploy`, and generate the client with `npx prisma generate` before starting the app.
 
 Run Redis locally:
 

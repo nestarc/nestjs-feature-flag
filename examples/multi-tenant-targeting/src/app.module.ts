@@ -13,7 +13,10 @@ import { PrismaService } from './prisma.service';
       useFactory: (prisma: PrismaService) => ({
         prisma,
         environment: process.env.NODE_ENV ?? 'development',
-        userIdExtractor: (req) => req.headers['x-user-id'] as string | undefined,
+        userIdExtractor: (req) => {
+          const userId = req.headers['x-user-id'];
+          return Array.isArray(userId) ? userId[0] ?? null : userId ?? null;
+        },
       }),
     }),
   ],
