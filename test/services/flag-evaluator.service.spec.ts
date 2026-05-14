@@ -29,10 +29,11 @@ function makeOverride(partial: Partial<FlagOverride> = {}): FlagOverride {
   return {
     id: 'override-1',
     flagId: 'flag-1',
-    tenantId: null,
-    userId: null,
-    environment: null,
+    attributes: { tenantId: 'tenant-1' },
+    priority: 0,
     enabled: true,
+    createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    updatedAt: new Date('2026-01-01T00:00:00.000Z'),
     ...partial,
   };
 }
@@ -53,129 +54,132 @@ describe('FlagEvaluatorService', () => {
     });
   });
 
-  describe('user overrides', () => {
-    it('should use user override when it matches userId', () => {
+  describe('attribute overrides', () => {
+    it('should use an override when all attributes match', () => {
       const flag = makeFlag({
-        overrides: [makeOverride({ userId: 'user-1', enabled: true })],
+        overrides: [makeOverride({ attributes: { tenantId: 'tenant-1', plan: 'pro' } })],
       });
-      const result = evaluator.evaluate(flag, { userId: 'user-1' });
-      expect(result.result).toBe(true);
-      expect(result.source).toBe('user_override');
-    });
 
-    it('should not use user override for different userId', () => {
-      const flag = makeFlag({
-        enabled: false,
-        overrides: [makeOverride({ userId: 'user-1', enabled: true })],
-      });
-      const result = evaluator.evaluate(flag, { userId: 'user-2' });
-      expect(result.result).toBe(false);
-    });
-
-    it('should skip user override when context has no userId', () => {
-      const flag = makeFlag({
-        enabled: false,
-        overrides: [makeOverride({ userId: 'user-1', enabled: true })],
-      });
-      const result = evaluator.evaluate(flag, {});
-      expect(result.result).toBe(false);
-    });
-  });
-
-  describe('tenant overrides', () => {
-    it('should use tenant override when it matches tenantId', () => {
-      const flag = makeFlag({
-        overrides: [makeOverride({ tenantId: 'tenant-1', enabled: true })],
-      });
-      const result = evaluator.evaluate(flag, { tenantId: 'tenant-1' });
-      expect(result.result).toBe(true);
-      expect(result.source).toBe('tenant_override');
-    });
-
-    it('should not use tenant override for different tenantId', () => {
-      const flag = makeFlag({
-        enabled: false,
-        overrides: [makeOverride({ tenantId: 'tenant-1', enabled: true })],
-      });
-      const result = evaluator.evaluate(flag, { tenantId: 'tenant-2' });
-      expect(result.result).toBe(false);
-    });
-  });
-
-  describe('environment overrides', () => {
-    it('should use environment override when it matches', () => {
-      const flag = makeFlag({
-        overrides: [makeOverride({ environment: 'staging', enabled: true })],
-      });
-      const result = evaluator.evaluate(flag, { environment: 'staging' });
-      expect(result.result).toBe(true);
-      expect(result.source).toBe('env_override');
-    });
-
-    it('should not use environment override for different env', () => {
-      const flag = makeFlag({
-        enabled: false,
-        overrides: [makeOverride({ environment: 'staging', enabled: true })],
-      });
-      const result = evaluator.evaluate(flag, { environment: 'production' });
-      expect(result.result).toBe(false);
-    });
-  });
-
-  describe('override priority', () => {
-    it('should skip user override when tenantId does not match', () => {
-      // override scoped to a specific tenantId — different tenant should not match
-      const flag = makeFlag({
-        enabled: false,
-        overrides: [makeOverride({ userId: 'user-1', tenantId: 'tenant-1', enabled: true })],
-      });
-      const result = evaluator.evaluate(flag, { userId: 'user-1', tenantId: 'tenant-2' });
-      expect(result.result).toBe(false);
-    });
-
-    it('should skip user override when environment does not match', () => {
-      const flag = makeFlag({
-        enabled: false,
-        overrides: [makeOverride({ userId: 'user-1', environment: 'staging', enabled: true })],
-      });
-      const result = evaluator.evaluate(flag, { userId: 'user-1', environment: 'production' });
-      expect(result.result).toBe(false);
-    });
-
-    it('should skip tenant override when environment does not match', () => {
-      const flag = makeFlag({
-        enabled: false,
-        overrides: [makeOverride({ tenantId: 'tenant-1', environment: 'staging', enabled: true })],
-      });
-      const result = evaluator.evaluate(flag, { tenantId: 'tenant-1', environment: 'production' });
-      expect(result.result).toBe(false);
-    });
-
-    it('should prioritize user override over tenant override', () => {
-      const flag = makeFlag({
-        overrides: [
-          makeOverride({ tenantId: 'tenant-1', enabled: false }),
-          makeOverride({ userId: 'user-1', enabled: true }),
-        ],
-      });
-      const result = evaluator.evaluate(flag, { userId: 'user-1', tenantId: 'tenant-1' });
-      expect(result.result).toBe(true);
-      expect(result.source).toBe('user_override');
-    });
-
-    it('should prioritize tenant override over environment override', () => {
-      const flag = makeFlag({
-        overrides: [
-          makeOverride({ environment: 'staging', enabled: false }),
-          makeOverride({ tenantId: 'tenant-1', enabled: true }),
-        ],
-      });
       const result = evaluator.evaluate(flag, {
         tenantId: 'tenant-1',
-        environment: 'staging',
+        attributes: { tenantId: 'tenant-1', plan: 'pro', country: 'KR' },
       });
+
       expect(result.result).toBe(true);
-      expect(result.source).toBe('tenant_override');
+      expect(result.source).toBe('override');
+    });
+
+    it('should not use an override when any attribute differs', () => {
+      const flag = makeFlag({
+        enabled: false,
+        overrides: [makeOverride({ attributes: { country: 'KR' } })],
+      });
+
+      const result = evaluator.evaluate(flag, {
+        attributes: { country: 'US' },
+      });
+
+      expect(result.result).toBe(false);
+      expect(result.source).toBe('global');
+    });
+
+    it('should not use an override when the context is missing an attribute', () => {
+      const flag = makeFlag({
+        enabled: false,
+        overrides: [makeOverride({ attributes: { tenantId: 'tenant-1', plan: 'pro' } })],
+      });
+
+      const result = evaluator.evaluate(flag, {
+        attributes: { tenantId: 'tenant-1' },
+      });
+
+      expect(result.result).toBe(false);
+    });
+
+    it('should prefer the override with more matching attributes', () => {
+      const flag = makeFlag({
+        overrides: [
+          makeOverride({
+            id: 'broad',
+            attributes: { tenantId: 'tenant-1' },
+            enabled: false,
+          }),
+          makeOverride({
+            id: 'specific',
+            attributes: { tenantId: 'tenant-1', plan: 'pro' },
+            enabled: true,
+          }),
+        ],
+      });
+
+      const result = evaluator.evaluate(flag, {
+        attributes: { tenantId: 'tenant-1', plan: 'pro' },
+      });
+
+      expect(result.result).toBe(true);
+    });
+
+    it('should use priority when specificity is tied', () => {
+      const flag = makeFlag({
+        overrides: [
+          makeOverride({
+            id: 'low-priority',
+            attributes: { tenantId: 'tenant-1' },
+            priority: 0,
+            enabled: false,
+          }),
+          makeOverride({
+            id: 'high-priority',
+            attributes: { plan: 'pro' },
+            priority: 20,
+            enabled: true,
+          }),
+        ],
+      });
+
+      const result = evaluator.evaluate(flag, {
+        attributes: { tenantId: 'tenant-1', plan: 'pro' },
+      });
+
+      expect(result.result).toBe(true);
+    });
+
+    it('should tie-break by createdAt then id', () => {
+      const flag = makeFlag({
+        overrides: [
+          makeOverride({
+            id: 'b-override',
+            attributes: { plan: 'pro' },
+            createdAt: new Date('2026-01-02T00:00:00.000Z'),
+            enabled: false,
+          }),
+          makeOverride({
+            id: 'a-override',
+            attributes: { plan: 'pro' },
+            createdAt: new Date('2026-01-01T00:00:00.000Z'),
+            enabled: true,
+          }),
+        ],
+      });
+
+      const result = evaluator.evaluate(flag, {
+        attributes: { plan: 'pro' },
+      });
+
+      expect(result.result).toBe(true);
+    });
+
+    it('should ignore empty override attributes defensively', () => {
+      const flag = makeFlag({
+        enabled: false,
+        overrides: [makeOverride({ attributes: {}, enabled: true })],
+      });
+
+      const result = evaluator.evaluate(flag, {
+        attributes: { tenantId: 'tenant-1' },
+      });
+
+      expect(result.result).toBe(false);
     });
   });
 

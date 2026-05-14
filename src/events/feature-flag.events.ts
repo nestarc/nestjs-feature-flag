@@ -14,7 +14,7 @@ export interface FlagEvaluatedEvent {
   flagKey: string;
   result: boolean;
   context: EvaluationContext;
-  source: 'user_override' | 'tenant_override' | 'env_override' | 'percentage' | 'global';
+  source: 'override' | 'percentage' | 'global';
   evaluationTimeMs: number;
 }
 
@@ -25,9 +25,8 @@ export interface FlagMutationEvent {
 
 export interface FlagOverrideEvent {
   flagKey: string;
-  tenantId?: string | null;
-  userId?: string | null;
-  environment?: string | null;
-  enabled: boolean;
+  attributes: Record<string, string | number | boolean | null>;
+  enabled?: boolean;
+  priority?: number;
   action: 'set' | 'removed';
 }
