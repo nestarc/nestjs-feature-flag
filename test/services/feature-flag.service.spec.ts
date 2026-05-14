@@ -54,7 +54,7 @@ describe('FeatureFlagService', () => {
       findAllActiveFlags: jest.fn(),
       findOverride: jest.fn(),
       createOverride: jest.fn(),
-      updateOverrideEnabled: jest.fn(),
+      updateOverride: jest.fn(),
       deleteOverride: jest.fn(),
     };
 
@@ -119,12 +119,20 @@ describe('FeatureFlagService', () => {
     it('should use explicit context when provided', async () => {
       const flag = makeFlagRecord('MY_FLAG', {
         overrides: [{
-          id: 'o1', flagId: 'uuid-1', tenantId: null,
-          userId: 'user-1', environment: null, enabled: true,
+          id: 'o1',
+          flagId: 'uuid-1',
+          attributes: { userId: 'user-1' },
+          priority: 0,
+          enabled: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
         }],
       });
       mockRepository.findFlagByKey.mockResolvedValue(flag);
-      mockContextResolver.resolve.mockReturnValue({ userId: 'user-1' });
+      mockContextResolver.resolve.mockReturnValue({
+        userId: 'user-1',
+        attributes: { userId: 'user-1' },
+      });
 
       const result = await service.isEnabled('MY_FLAG', { userId: 'user-1' });
       expect(result).toBe(true);
@@ -135,8 +143,13 @@ describe('FeatureFlagService', () => {
       // Flag with a user override
       const flag = makeFlagRecord('MY_FLAG', {
         overrides: [{
-          id: 'o1', flagId: 'uuid-1', tenantId: null,
-          userId: 'ambient-user', environment: null, enabled: true,
+          id: 'o1',
+          flagId: 'uuid-1',
+          attributes: { userId: 'ambient-user' },
+          priority: 0,
+          enabled: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
         }],
       });
       mockRepository.findFlagByKey.mockResolvedValue(flag);
@@ -152,12 +165,20 @@ describe('FeatureFlagService', () => {
     it('should inject environment from module options', async () => {
       const flag = makeFlagRecord('MY_FLAG', {
         overrides: [{
-          id: 'o1', flagId: 'uuid-1', tenantId: null,
-          userId: null, environment: 'test', enabled: true,
+          id: 'o1',
+          flagId: 'uuid-1',
+          attributes: { environment: 'test' },
+          priority: 0,
+          enabled: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
         }],
       });
       mockRepository.findFlagByKey.mockResolvedValue(flag);
-      mockContextResolver.resolve.mockReturnValue({ environment: 'test' });
+      mockContextResolver.resolve.mockReturnValue({
+        environment: 'test',
+        attributes: { environment: 'test' },
+      });
 
       const result = await service.isEnabled('MY_FLAG');
       expect(result).toBe(true);
@@ -225,56 +246,63 @@ describe('FeatureFlagService', () => {
   });
 
   describe('setOverride', () => {
-    it('should upsert a tenant override', async () => {
+    it('should create a new attribute override when none exists', async () => {
       mockRepository.findFlagIdByKey.mockResolvedValue('uuid-1');
       mockRepository.findOverride.mockResolvedValue(null);
       mockRepository.createOverride.mockResolvedValue(undefined);
 
       await service.setOverride('MY_FLAG', {
-        tenantId: 'tenant-1',
+        attributes: { tenantId: 'tenant-1', plan: 'pro' },
         enabled: true,
+        priority: 10,
       });
 
-      expect(mockRepository.findOverride).toHaveBeenCalled();
-      expect(mockRepository.createOverride).toHaveBeenCalled();
+      expect(mockRepository.findOverride).toHaveBeenCalledWith('uuid-1', {
+        attributes: { tenantId: 'tenant-1', plan: 'pro' },
+      });
+      expect(mockRepository.createOverride).toHaveBeenCalledWith(
+        'uuid-1',
+        { attributes: { tenantId: 'tenant-1', plan: 'pro' } },
+        true,
+        10,
+      );
     });
 
     it('should update existing override instead of creating a duplicate', async () => {
-      const existingOverride = { id: 'existing-1' };
-
       mockRepository.findFlagIdByKey.mockResolvedValue('uuid-1');
-      mockRepository.findOverride.mockResolvedValue(existingOverride);
-      mockRepository.updateOverrideEnabled.mockResolvedValue(undefined);
+      mockRepository.findOverride.mockResolvedValue({ id: 'existing-1' });
+      mockRepository.updateOverride.mockResolvedValue(undefined);
 
-      await service.setOverride('MY_FLAG', { enabled: true });
+      await service.setOverride('MY_FLAG', {
+        attributes: { tenantId: 'tenant-1' },
+        enabled: false,
+      });
 
-      expect(mockRepository.findOverride).toHaveBeenCalledWith(
-        'uuid-1',
-        {
-          tenantId: null,
-          userId: null,
-          environment: null,
-        },
-      );
-      expect(mockRepository.updateOverrideEnabled).toHaveBeenCalledWith('existing-1', true);
+      expect(mockRepository.updateOverride).toHaveBeenCalledWith('existing-1', {
+        enabled: false,
+        priority: 0,
+      });
+      expect(mockRepository.createOverride).not.toHaveBeenCalled();
     });
 
-    it('should create a new override when none exists', async () => {
-      mockRepository.findFlagIdByKey.mockResolvedValue('uuid-1');
-      mockRepository.findOverride.mockResolvedValue(null);
-      mockRepository.createOverride.mockResolvedValue(undefined);
+    it('should reject empty attributes', async () => {
+      await expect(
+        service.setOverride('MY_FLAG', {
+          attributes: {},
+          enabled: true,
+        }),
+      ).rejects.toThrow('attributes must be a non-empty object');
+    });
 
-      await service.setOverride('MY_FLAG', { tenantId: 'tenant-1', enabled: true });
+    it('should throw when flag is not found', async () => {
+      mockRepository.findFlagIdByKey.mockResolvedValue(null);
 
-      expect(mockRepository.createOverride).toHaveBeenCalledWith(
-        'uuid-1',
-        {
-          tenantId: 'tenant-1',
-          userId: null,
-          environment: null,
-        },
-        true,
-      );
+      await expect(
+        service.setOverride('MISSING', {
+          attributes: { tenantId: 'tenant-1' },
+          enabled: true,
+        }),
+      ).rejects.toThrow('Feature flag "MISSING" not found');
     });
   });
 
@@ -316,22 +344,44 @@ describe('FeatureFlagService', () => {
       mockRepository.findOverride.mockResolvedValue({ id: 'ov-1' });
       mockRepository.deleteOverride.mockResolvedValue(undefined);
 
-      await service.removeOverride('TEST', { tenantId: 't-1' });
+      await service.removeOverride('TEST', {
+        attributes: { tenantId: 't-1' },
+      });
 
+      expect(mockRepository.findOverride).toHaveBeenCalledWith('flag-1', {
+        attributes: { tenantId: 't-1' },
+      });
       expect(mockRepository.deleteOverride).toHaveBeenCalledWith('ov-1');
       expect(mockCacheAdapter.invalidate).toHaveBeenCalledWith('TEST');
     });
 
     it('should throw NotFoundException when flag not found', async () => {
       mockRepository.findFlagIdByKey.mockResolvedValue(null);
-      await expect(service.removeOverride('MISSING', {})).rejects.toThrow(NotFoundException);
+
+      await expect(
+        service.removeOverride('MISSING', {
+          attributes: { tenantId: 't-1' },
+        }),
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('should not fail when override does not exist', async () => {
       mockRepository.findFlagIdByKey.mockResolvedValue('flag-1');
       mockRepository.findOverride.mockResolvedValue(null);
 
-      await expect(service.removeOverride('TEST', {})).resolves.not.toThrow();
+      await expect(
+        service.removeOverride('TEST', {
+          attributes: { tenantId: 't-1' },
+        }),
+      ).resolves.not.toThrow();
+    });
+
+    it('should reject empty attributes', async () => {
+      await expect(
+        service.removeOverride('TEST', {
+          attributes: {},
+        }),
+      ).rejects.toThrow('attributes must be a non-empty object');
     });
   });
 
@@ -392,10 +442,20 @@ describe('FeatureFlagService', () => {
       mockRepository.findOverride.mockResolvedValue(null);
       mockRepository.createOverride.mockResolvedValue(undefined);
 
-      await service.setOverride('MY_FLAG', { tenantId: 'tenant-1', enabled: true });
+      await service.setOverride('MY_FLAG', {
+        attributes: { tenantId: 'tenant-1' },
+        enabled: true,
+        priority: 5,
+      });
       expect(mockEventPublisher.emit).toHaveBeenCalledWith(
         expect.stringContaining('override'),
-        expect.objectContaining({ flagKey: 'MY_FLAG', action: 'set' }),
+        expect.objectContaining({
+          flagKey: 'MY_FLAG',
+          attributes: { tenantId: 'tenant-1' },
+          enabled: true,
+          priority: 5,
+          action: 'set',
+        }),
       );
     });
 
@@ -404,10 +464,16 @@ describe('FeatureFlagService', () => {
       mockRepository.findOverride.mockResolvedValue({ id: 'ov-1' });
       mockRepository.deleteOverride.mockResolvedValue(undefined);
 
-      await service.removeOverride('MY_FLAG', { tenantId: 'tenant-1' });
+      await service.removeOverride('MY_FLAG', {
+        attributes: { tenantId: 'tenant-1' },
+      });
       expect(mockEventPublisher.emit).toHaveBeenCalledWith(
         expect.stringContaining('override'),
-        expect.objectContaining({ flagKey: 'MY_FLAG', action: 'removed' }),
+        expect.objectContaining({
+          flagKey: 'MY_FLAG',
+          attributes: { tenantId: 'tenant-1' },
+          action: 'removed',
+        }),
       );
     });
 
@@ -420,24 +486,23 @@ describe('FeatureFlagService', () => {
     });
   });
 
-  describe('setOverride error handling', () => {
-    it('should throw when flag is not found', async () => {
-      mockRepository.findFlagIdByKey.mockResolvedValue(null);
-
-      await expect(service.setOverride('MISSING', { enabled: true })).rejects.toThrow(
-        'Feature flag "MISSING" not found',
-      );
-    });
-  });
-
   describe('context resolution', () => {
     it('should delegate context resolution to FlagContextResolver', async () => {
-      mockContextResolver.resolve.mockReturnValue({ tenantId: 'tenant-xyz', environment: 'test' });
+      mockContextResolver.resolve.mockReturnValue({
+        tenantId: 'tenant-xyz',
+        environment: 'test',
+        attributes: { tenantId: 'tenant-xyz', environment: 'test' },
+      });
 
       const flag = makeFlagRecord('MY_FLAG', {
         overrides: [{
-          id: 'o1', flagId: 'uuid-1', tenantId: 'tenant-xyz',
-          userId: null, environment: null, enabled: true,
+          id: 'o1',
+          flagId: 'uuid-1',
+          attributes: { tenantId: 'tenant-xyz' },
+          priority: 0,
+          enabled: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
         }],
       });
       mockRepository.findFlagByKey.mockResolvedValue(flag);

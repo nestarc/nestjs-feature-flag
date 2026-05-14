@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Inject, NotFoundException } from '@nestjs/common';
 import { FEATURE_FLAG_MODULE_OPTIONS, CACHE_ADAPTER, FEATURE_FLAG_REPOSITORY } from '../feature-flag.constants';
 import { FeatureFlagModuleOptions } from '../interfaces/feature-flag-options.interface';
 import {
@@ -15,6 +15,7 @@ import { FlagEvaluatorService } from './flag-evaluator.service';
 import { FlagContextResolver } from './flag-context-resolver';
 import { FlagEventPublisher } from './flag-event-publisher';
 import { FeatureFlagEvents, FlagEvaluatedEvent } from '../events/feature-flag.events';
+import { normalizeTargetingAttributes } from '../utils/targeting-attributes';
 
 const CACHE_INVALIDATION_FAILED = 'feature-flag.cache.invalidation-failed';
 
@@ -89,28 +90,31 @@ export class FeatureFlagService {
   }
 
   async setOverride(key: string, input: SetOverrideInput): Promise<void> {
+    const attributes = this.normalizeOverrideAttributes(input.attributes);
+    const priority = input.priority ?? 0;
+
     const flagId = await this.repository.findFlagIdByKey(key);
     if (!flagId) {
       throw new NotFoundException(`Feature flag "${key}" not found`);
     }
 
-    const criteria = {
-      tenantId: input.tenantId ?? null,
-      userId: input.userId ?? null,
-      environment: input.environment ?? null,
-    };
-
+    const criteria = { attributes };
     const existing = await this.repository.findOverride(flagId, criteria);
     if (existing) {
-      await this.repository.updateOverrideEnabled(existing.id, input.enabled);
+      await this.repository.updateOverride(existing.id, {
+        enabled: input.enabled,
+        priority,
+      });
     } else {
-      await this.repository.createOverride(flagId, criteria, input.enabled);
+      await this.repository.createOverride(flagId, criteria, input.enabled, priority);
     }
 
     await this.safeInvalidateCache(key);
     this.eventPublisher.emit(FeatureFlagEvents.OVERRIDE_SET, {
       flagKey: key,
-      ...input,
+      attributes,
+      enabled: input.enabled,
+      priority,
       action: 'set',
     });
   }
@@ -133,17 +137,14 @@ export class FeatureFlagService {
   }
 
   async removeOverride(key: string, input: RemoveOverrideInput): Promise<void> {
+    const attributes = this.normalizeOverrideAttributes(input.attributes);
+
     const flagId = await this.repository.findFlagIdByKey(key);
     if (!flagId) {
       throw new NotFoundException(`Feature flag "${key}" not found`);
     }
 
-    const criteria = {
-      tenantId: input.tenantId ?? null,
-      userId: input.userId ?? null,
-      environment: input.environment ?? null,
-    };
-
+    const criteria = { attributes };
     const existing = await this.repository.findOverride(flagId, criteria);
     if (existing) {
       await this.repository.deleteOverride(existing.id);
@@ -152,9 +153,17 @@ export class FeatureFlagService {
     await this.safeInvalidateCache(key);
     this.eventPublisher.emit(FeatureFlagEvents.OVERRIDE_REMOVED, {
       flagKey: key,
-      ...input,
+      attributes,
       action: 'removed',
     });
+  }
+
+  private normalizeOverrideAttributes(input: unknown) {
+    try {
+      return normalizeTargetingAttributes(input, { allowEmpty: false });
+    } catch (error) {
+      throw new BadRequestException(String(error instanceof Error ? error.message : error));
+    }
   }
 
   /**
