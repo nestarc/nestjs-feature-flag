@@ -7,25 +7,36 @@ All notable changes to `@nestarc/feature-flag` will be documented in this file.
 ### Added
 - Attribute-based override targeting with non-empty `attributes` JSON objects
 - Override `priority` for tie-breaking between matching overrides with the same specificity
+- Admin API DTO validation with `class-validator` and `class-transformer`
+- Automatic Prisma migration from fixed override columns to `attributes`
 - Top-level `userId`, `tenantId`, and `environment` merge into targeting attributes during evaluation
 - Example apps for basic route guards, multi-tenant attribute targeting, and Redis events
 
 ### Changed
+- `SetOverrideInput` and `RemoveOverrideInput` now use `attributes`
+- `FlagOverride` now exposes `attributes` and `priority`
 - Override evaluation now matches exact attribute key/value pairs instead of a fixed tenant/user/environment hierarchy
 - Matching override tie-break order is more attributes, higher `priority`, earlier `createdAt`, then lower `id`
+- Evaluation event source now uses `override` for matched attribute overrides
 - `FeatureFlagOverride` storage now uses `attributes` `jsonb` plus `priority`
 
 ### Breaking
+- Removed direct override fields `tenantId`, `userId`, and `environment`
+- Removed `FeatureFlagRepository.updateOverrideEnabled()`
 - `setOverride()` and Admin API override requests now require a non-empty `attributes` object
 - Legacy override bodies such as `{ "tenantId": "tenant-1", "enabled": true }` are rejected
+- Prisma schema migration is required
 - Legacy global override rows with `tenant_id`, `user_id`, and `environment` all `NULL` are removed during migration
+- Duplicate legacy override rows that backfill to the same `(flag_id, attributes)` are deduplicated during migration
 - `feature_flag_overrides` no longer stores `tenant_id`, `user_id`, or `environment` columns
 
 ### Migration
 - Run `npx prisma migrate deploy`
 - Legacy `tenant_id`, `user_id`, and `environment` values are backfilled to `attributes.tenantId`, `attributes.userId`, and `attributes.environment`
+- Duplicate backfilled overrides keep the latest `updated_at`, then latest `created_at`, then highest `id`
+- Replace `{ "tenantId": "t-1", "enabled": true }` with `{ "attributes": { "tenantId": "t-1" }, "enabled": true }`
 - Use `{ "attributes": { "tenantId": "tenant-1" }, "enabled": true }` for Admin API override requests
-- Install `class-validator` and `class-transformer` if you use `FeatureFlagAdminModule`
+- Install `class-validator` and `class-transformer` with the required peer dependencies
 
 ## [0.2.0] — 2026-04-10
 

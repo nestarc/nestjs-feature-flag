@@ -32,10 +32,7 @@ npm install @nestarc/feature-flag
 ### Peer dependencies
 
 ```bash
-npm install @nestjs/common @nestjs/core @prisma/client rxjs reflect-metadata
-
-# Required if you use FeatureFlagAdminModule
-npm install class-validator class-transformer
+npm install @nestjs/common @nestjs/core @prisma/client class-transformer class-validator rxjs reflect-metadata
 ```
 
 ### Optional
@@ -109,7 +106,16 @@ model FeatureFlagOverride {
 }
 ```
 
-The v0.3.0 migration creates a unique index on `(flag_id, attributes)` and a check constraint requiring override attributes to be a non-empty JSON object.
+The v0.3.0 migration creates a unique index on `(flag_id, attributes)` and a check constraint requiring override attributes to be a non-empty JSON object. If you copy this schema into a greenfield app instead of running the included migrations, add an equivalent raw SQL migration because Prisma schema cannot express these PostgreSQL constraints:
+
+```sql
+CREATE UNIQUE INDEX "uq_feature_flag_override_attributes"
+  ON "feature_flag_overrides"("flag_id", "attributes");
+
+ALTER TABLE "feature_flag_overrides"
+  ADD CONSTRAINT "chk_feature_flag_override_attributes_non_empty"
+  CHECK (jsonb_typeof("attributes") = 'object' AND "attributes" <> '{}'::jsonb);
+```
 
 ### Migration from 0.2.0 to 0.3.0
 
@@ -129,7 +135,7 @@ The migration maps legacy override columns into attributes:
 | `user_id` | `attributes.userId` |
 | `environment` | `attributes.environment` |
 
-Rows with all three legacy columns set to `NULL` are deleted because empty override attributes are not valid in v0.3.0.
+Rows with all three legacy columns set to `NULL` are deleted because empty override attributes are not valid in v0.3.0. If multiple legacy rows backfill to the same `(flag_id, attributes)`, the migration keeps the row with the latest `updated_at`, then latest `created_at`, then highest `id`, and deletes the other duplicates before creating the unique index.
 
 Legacy Admin API bodies are rejected:
 
@@ -399,7 +405,7 @@ REST Admin API body:
 
 ## Events
 
-Enable event emission to observe flag lifecycle changes. Requires `@nestjs/event-emitter` as an optional peer dependency.
+Enable event emission to observe flag lifecycle changes. Requires installing `@nestjs/event-emitter`.
 
 **Important:** You must import `EventEmitterModule.forRoot()` in your app module. The feature-flag module reuses the same `EventEmitter2` singleton that NestJS manages, so `@OnEvent()` listeners work out of the box.
 
