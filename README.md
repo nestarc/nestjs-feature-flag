@@ -6,12 +6,12 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Docs](https://img.shields.io/badge/docs-nestarc.dev-blue.svg)](https://nestarc.dev/packages/feature-flag/)
 
-DB-backed feature flags for NestJS + Prisma + PostgreSQL -- tenant-aware overrides, percentage rollouts, and zero external dependencies.
+DB-backed feature flags for NestJS + Prisma + PostgreSQL -- attribute-targeted overrides, percentage rollouts, and zero external dependencies.
 
 ## Features
 
 - **Database-backed** -- flags stored in PostgreSQL via Prisma, no external service required
-- **Tenant / user / environment overrides** -- granular control per tenant, user, or deployment environment
+- **Attribute-targeted overrides** -- exact-match targeting for tenants, users, environments, plans, regions, or custom dimensions
 - **Percentage rollouts** -- deterministic hashing (murmurhash3) for consistent per-user bucketing
 - **Guard decorator** -- `@FeatureFlag()` automatically gates routes and controllers
 - **Bypass decorator** -- `@BypassFeatureFlag()` exempts health checks and public endpoints
@@ -33,6 +33,9 @@ npm install @nestarc/feature-flag
 
 ```bash
 npm install @nestjs/common @nestjs/core @prisma/client rxjs reflect-metadata
+
+# Required if you use FeatureFlagAdminModule
+npm install class-validator class-transformer
 ```
 
 ### Optional
@@ -91,14 +94,13 @@ model FeatureFlag {
 }
 
 model FeatureFlagOverride {
-  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  flagId      String   @map("flag_id") @db.Uuid
-  tenantId    String?  @map("tenant_id")
-  userId      String?  @map("user_id")
-  environment String?
-  enabled     Boolean
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  flagId     String   @map("flag_id") @db.Uuid
+  attributes Json     @default("{}")
+  priority   Int      @default(0)
+  enabled    Boolean
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz()
 
   flag FeatureFlag @relation(fields: [flagId], references: [id], onDelete: Cascade)
 
@@ -107,57 +109,39 @@ model FeatureFlagOverride {
 }
 ```
 
-### Partial unique indexes for overrides
+The v0.3.0 migration creates a unique index on `(flag_id, attributes)` and a check constraint requiring override attributes to be a non-empty JSON object.
 
-PostgreSQL treats `NULL != NULL` in standard unique constraints, which means a simple `UNIQUE(flag_id, tenant_id, user_id, environment)` would allow duplicate rows when any nullable column is `NULL`. To enforce true uniqueness across all combinations, apply the following migration that creates one partial index per NULL/NOT-NULL pattern:
+### Migration from 0.2.0 to 0.3.0
 
-```sql
--- Drop the old unique constraint that does not handle NULLs correctly
-ALTER TABLE feature_flag_overrides
-  DROP CONSTRAINT IF EXISTS uq_override_context;
+v0.3.0 changes override storage from fixed `tenant_id`, `user_id`, and `environment` columns to an `attributes` `jsonb` object plus `priority`.
 
--- Global override (all nullable columns NULL)
-CREATE UNIQUE INDEX uq_override_000
-  ON feature_flag_overrides (flag_id)
-  WHERE tenant_id IS NULL AND user_id IS NULL AND environment IS NULL;
+Run your Prisma migrations during deployment:
 
--- Only environment is NOT NULL
-CREATE UNIQUE INDEX uq_override_001
-  ON feature_flag_overrides (flag_id, environment)
-  WHERE tenant_id IS NULL AND user_id IS NULL AND environment IS NOT NULL;
-
--- Only user_id is NOT NULL
-CREATE UNIQUE INDEX uq_override_010
-  ON feature_flag_overrides (flag_id, user_id)
-  WHERE tenant_id IS NULL AND user_id IS NOT NULL AND environment IS NULL;
-
--- user_id + environment
-CREATE UNIQUE INDEX uq_override_011
-  ON feature_flag_overrides (flag_id, user_id, environment)
-  WHERE tenant_id IS NULL AND user_id IS NOT NULL AND environment IS NOT NULL;
-
--- Only tenant_id is NOT NULL
-CREATE UNIQUE INDEX uq_override_100
-  ON feature_flag_overrides (flag_id, tenant_id)
-  WHERE tenant_id IS NOT NULL AND user_id IS NULL AND environment IS NULL;
-
--- tenant_id + environment
-CREATE UNIQUE INDEX uq_override_101
-  ON feature_flag_overrides (flag_id, tenant_id, environment)
-  WHERE tenant_id IS NOT NULL AND user_id IS NULL AND environment IS NOT NULL;
-
--- tenant_id + user_id
-CREATE UNIQUE INDEX uq_override_110
-  ON feature_flag_overrides (flag_id, tenant_id, user_id)
-  WHERE tenant_id IS NOT NULL AND user_id IS NOT NULL AND environment IS NULL;
-
--- All three NOT NULL
-CREATE UNIQUE INDEX uq_override_111
-  ON feature_flag_overrides (flag_id, tenant_id, user_id, environment)
-  WHERE tenant_id IS NOT NULL AND user_id IS NOT NULL AND environment IS NOT NULL;
+```bash
+npx prisma migrate deploy
 ```
 
-This SQL is included in the initial migration at `prisma/migrations/20260405000000_init/migration.sql`.
+The migration maps legacy override columns into attributes:
+
+| v0.2.0 column | v0.3.0 attribute |
+| ------------- | ---------------- |
+| `tenant_id` | `attributes.tenantId` |
+| `user_id` | `attributes.userId` |
+| `environment` | `attributes.environment` |
+
+Rows with all three legacy columns set to `NULL` are deleted because empty override attributes are not valid in v0.3.0.
+
+Legacy Admin API bodies are rejected:
+
+```json
+{ "tenantId": "tenant-1", "enabled": true }
+```
+
+Use an `attributes` object instead:
+
+```json
+{ "attributes": { "tenantId": "tenant-1" }, "enabled": true }
+```
 
 ## Module Registration
 
@@ -358,36 +342,59 @@ Passing `null` explicitly clears that dimension, suppressing any ambient value f
 const globalResult = await this.flags.isEnabled('MY_FLAG', { userId: null });
 ```
 
-## Overrides
+## Attribute Targeting
 
-Set context-specific overrides that take precedence over the global flag value:
+Overrides match exact attributes. Every key/value in an override's `attributes` object must exist in the evaluation context attributes for the override to apply.
 
 ```typescript
-// Enable for a specific tenant
-await this.flags.setOverride('MY_FLAG', {
+const enabled = await this.flags.isEnabled('NEW_CHECKOUT', {
+  userId: 'user-123',
   tenantId: 'tenant-1',
-  enabled: true,
-});
-
-// Disable for a specific user
-await this.flags.setOverride('MY_FLAG', {
-  userId: 'user-42',
-  enabled: false,
-});
-
-// Enable only in staging
-await this.flags.setOverride('MY_FLAG', {
-  environment: 'staging',
-  enabled: true,
-});
-
-// Combine dimensions
-await this.flags.setOverride('MY_FLAG', {
-  tenantId: 'tenant-1',
-  userId: 'user-42',
   environment: 'production',
-  enabled: true,
+  attributes: {
+    plan: 'pro',
+    country: 'KR',
+  },
 });
+```
+
+Top-level `userId`, `tenantId`, and `environment` are merged into targeting attributes. If the same key also appears in `attributes`, the top-level value wins.
+
+When multiple overrides match, the evaluator chooses the winner by:
+
+1. More attributes
+2. Higher `priority`
+3. Earlier `createdAt`
+4. Lower `id`
+
+## Overrides
+
+Set attribute-based overrides that take precedence over the global flag value:
+
+```typescript
+await flags.setOverride('NEW_CHECKOUT', {
+  attributes: {
+    tenantId: 'tenant-1',
+    plan: 'pro',
+    country: 'KR',
+  },
+  enabled: true,
+  priority: 10,
+});
+```
+
+REST Admin API body:
+
+```json
+{
+  "attributes": {
+    "tenantId": "tenant-1",
+    "plan": "pro",
+    "country": "KR"
+  },
+  "enabled": true,
+  "priority": 10
+}
 ```
 
 ## Events
@@ -484,16 +491,14 @@ This is a **stateless boolean stub** -- write operations do not persist state ac
 
 ## Evaluation Priority
 
-When `isEnabled()` is called, flags are evaluated through a 6-layer cascade. The first matching layer wins:
+When `isEnabled()` is called, flags are evaluated through the current cascade. The first matching layer wins:
 
 | Priority | Layer                  | Description                                                        |
 | -------- | ---------------------- | ------------------------------------------------------------------ |
 | 1        | **Archived**           | If the flag has `archivedAt` set, evaluation always returns `false` |
-| 2        | **User override**      | Override matching the current `userId` (most specific)              |
-| 3        | **Tenant override**    | Override matching the current `tenantId`                            |
-| 4        | **Environment override**| Override matching the current `environment`                        |
-| 5        | **Percentage rollout** | Deterministic hash of `flagKey + userId` (or `tenantId`) mod 100   |
-| 6        | **Global default**     | The flag's `enabled` field                                         |
+| 2        | **Attribute override** | Best override whose attributes are all present in the evaluation context |
+| 3        | **Percentage rollout** | Deterministic hash of `flagKey + userId` (or `tenantId`) mod 100   |
+| 4        | **Global default**     | The flag's `enabled` field                                         |
 
 Percentage rollout uses murmurhash3 for deterministic bucketing: the same user always gets the same result for a given flag, ensuring a consistent experience across requests.
 
@@ -636,6 +641,12 @@ class MyTenantProvider implements TenantContextProvider {
 })
 export class AppModule {}
 ```
+
+## Examples
+
+- [examples/basic-guard](examples/basic-guard) - route gating with `@FeatureFlag()`
+- [examples/multi-tenant-targeting](examples/multi-tenant-targeting) - tenant and plan targeting with attributes
+- [examples/redis-events](examples/redis-events) - Redis cache invalidation and feature flag events
 
 ## Performance
 

@@ -2,6 +2,31 @@
 
 All notable changes to `@nestarc/feature-flag` will be documented in this file.
 
+## [0.3.0] — 2026-05-12
+
+### Added
+- Attribute-based override targeting with non-empty `attributes` JSON objects
+- Override `priority` for tie-breaking between matching overrides with the same specificity
+- Top-level `userId`, `tenantId`, and `environment` merge into targeting attributes during evaluation
+- Example apps for basic route guards, multi-tenant attribute targeting, and Redis events
+
+### Changed
+- Override evaluation now matches exact attribute key/value pairs instead of a fixed tenant/user/environment hierarchy
+- Matching override tie-break order is more attributes, higher `priority`, earlier `createdAt`, then lower `id`
+- `FeatureFlagOverride` storage now uses `attributes` `jsonb` plus `priority`
+
+### Breaking
+- `setOverride()` and Admin API override requests now require a non-empty `attributes` object
+- Legacy override bodies such as `{ "tenantId": "tenant-1", "enabled": true }` are rejected
+- Legacy global override rows with `tenant_id`, `user_id`, and `environment` all `NULL` are removed during migration
+- `feature_flag_overrides` no longer stores `tenant_id`, `user_id`, or `environment` columns
+
+### Migration
+- Run `npx prisma migrate deploy`
+- Legacy `tenant_id`, `user_id`, and `environment` values are backfilled to `attributes.tenantId`, `attributes.userId`, and `attributes.environment`
+- Use `{ "attributes": { "tenantId": "tenant-1" }, "enabled": true }` for Admin API override requests
+- Install `class-validator` and `class-transformer` if you use `FeatureFlagAdminModule`
+
 ## [0.2.0] — 2026-04-10
 
 ### Added
