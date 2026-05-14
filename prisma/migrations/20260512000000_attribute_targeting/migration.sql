@@ -48,6 +48,9 @@ ALTER TABLE "feature_flag_overrides"
   DROP COLUMN "user_id",
   DROP COLUMN "environment";
 
+ALTER TABLE "feature_flag_overrides"
+  ALTER COLUMN "attributes" DROP DEFAULT;
+
 CREATE UNIQUE INDEX "uq_feature_flag_override_attributes"
   ON "feature_flag_overrides"("flag_id", "attributes");
 

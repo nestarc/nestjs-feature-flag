@@ -93,7 +93,7 @@ model FeatureFlag {
 model FeatureFlagOverride {
   id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   flagId     String   @map("flag_id") @db.Uuid
-  attributes Json     @default("{}")
+  attributes Json
   priority   Int      @default(0)
   enabled    Boolean
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz()
@@ -106,7 +106,7 @@ model FeatureFlagOverride {
 }
 ```
 
-The v0.3.0 migration creates a unique index on `(flag_id, attributes)` and a check constraint requiring override attributes to be a non-empty JSON object. If you copy this schema into a greenfield app instead of running the included migrations, add an equivalent raw SQL migration because Prisma schema cannot express these PostgreSQL constraints:
+The v0.3.0 migration uses an `{}` default only while backfilling legacy rows, then drops that default. It also creates a unique index on `(flag_id, attributes)` and a check constraint requiring override attributes to be a non-empty JSON object. If you copy this schema into a greenfield app instead of running the included migrations, add an equivalent raw SQL migration because Prisma schema cannot express these PostgreSQL constraints:
 
 ```sql
 CREATE UNIQUE INDEX "uq_feature_flag_override_attributes"

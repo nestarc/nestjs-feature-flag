@@ -68,19 +68,26 @@ describe('attribute targeting migration schema (e2e)', () => {
   });
 
   it('should expose attributes and priority columns on feature_flag_overrides', async () => {
-    const columns = await prisma.$queryRaw<Array<{ column_name: string }>>`
-      SELECT column_name
+    const columns = await prisma.$queryRaw<
+      Array<{ column_name: string; column_default: string | null }>
+    >`
+      SELECT column_name, column_default
       FROM information_schema.columns
       WHERE table_name = 'feature_flag_overrides'
       ORDER BY column_name
     `;
 
     const columnNames = columns.map((column) => column.column_name);
+    const columnDefaults = new Map(
+      columns.map((column) => [column.column_name, column.column_default]),
+    );
+
     expect(columnNames).toContain('attributes');
     expect(columnNames).toContain('priority');
     expect(columnNames).not.toContain('tenant_id');
     expect(columnNames).not.toContain('user_id');
     expect(columnNames).not.toContain('environment');
+    expect(columnDefaults.get('attributes')).toBeNull();
   });
 
   it('should enforce non-empty attributes', async () => {
