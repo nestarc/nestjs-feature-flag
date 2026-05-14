@@ -144,7 +144,7 @@ describe('FlagEvaluatorService', () => {
       expect(result.result).toBe(true);
     });
 
-    it('should tie-break by createdAt then id', () => {
+    it('should tie-break by earlier createdAt', () => {
       const flag = makeFlag({
         overrides: [
           makeOverride({
@@ -157,6 +157,32 @@ describe('FlagEvaluatorService', () => {
             id: 'a-override',
             attributes: { plan: 'pro' },
             createdAt: new Date('2026-01-01T00:00:00.000Z'),
+            enabled: true,
+          }),
+        ],
+      });
+
+      const result = evaluator.evaluate(flag, {
+        attributes: { plan: 'pro' },
+      });
+
+      expect(result.result).toBe(true);
+    });
+
+    it('should tie-break by id when createdAt is tied', () => {
+      const createdAt = new Date('2026-01-01T00:00:00.000Z');
+      const flag = makeFlag({
+        overrides: [
+          makeOverride({
+            id: 'b-override',
+            attributes: { plan: 'pro' },
+            createdAt,
+            enabled: false,
+          }),
+          makeOverride({
+            id: 'a-override',
+            attributes: { plan: 'pro' },
+            createdAt,
             enabled: true,
           }),
         ],
