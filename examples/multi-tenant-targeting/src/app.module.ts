@@ -1,11 +1,14 @@
 import { Module } from '@nestjs/common';
 import { FeatureFlagModule } from '@nestarc/feature-flag';
 import { CheckoutController } from './checkout.controller';
+import { PrismaModule } from './prisma.module';
 import { PrismaService } from './prisma.service';
 
 @Module({
   imports: [
+    PrismaModule,
     FeatureFlagModule.forRootAsync({
+      imports: [PrismaModule],
       inject: [PrismaService],
       useFactory: (prisma: PrismaService) => ({
         prisma,
@@ -15,6 +18,5 @@ import { PrismaService } from './prisma.service';
     }),
   ],
   controllers: [CheckoutController],
-  providers: [PrismaService],
 })
 export class AppModule {}

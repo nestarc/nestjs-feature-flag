@@ -1,27 +1,28 @@
 import { Module } from '@nestjs/common';
 import { EventEmitterModule } from '@nestjs/event-emitter';
-import { FeatureFlagModule, RedisCacheAdapter } from '@nestarc/feature-flag';
-import { Redis } from 'ioredis';
+import { FeatureFlagModule } from '@nestarc/feature-flag';
 import { FlagEventsListener } from './flag-events.listener';
+import { PrismaModule } from './prisma.module';
 import { PrismaService } from './prisma.service';
+import { RedisCacheProvider } from './redis-cache.provider';
+import { RedisModule } from './redis.module';
 
 @Module({
   imports: [
     EventEmitterModule.forRoot(),
+    PrismaModule,
+    RedisModule,
     FeatureFlagModule.forRootAsync({
-      inject: [PrismaService],
-      useFactory: (prisma: PrismaService) => {
-        const redis = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379');
-
-        return {
-          prisma,
-          environment: process.env.NODE_ENV ?? 'production',
-          emitEvents: true,
-          cacheAdapter: new RedisCacheAdapter({ client: redis }),
-        };
-      },
+      imports: [PrismaModule, RedisModule],
+      inject: [PrismaService, RedisCacheProvider],
+      useFactory: (prisma: PrismaService, redisCache: RedisCacheProvider) => ({
+        prisma,
+        environment: process.env.NODE_ENV ?? 'production',
+        emitEvents: true,
+        cacheAdapter: redisCache.adapter,
+      }),
     }),
   ],
-  providers: [PrismaService, FlagEventsListener],
+  providers: [FlagEventsListener],
 })
 export class AppModule {}
