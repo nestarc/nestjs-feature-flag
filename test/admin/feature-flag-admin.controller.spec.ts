@@ -31,9 +31,7 @@ describe('FeatureFlagAdminController', () => {
   beforeEach(async () => {
     const module = await Test.createTestingModule({
       controllers: [FeatureFlagAdminController],
-      providers: [
-        { provide: FeatureFlagService, useValue: mockService },
-      ],
+      providers: [{ provide: FeatureFlagService, useValue: mockService }],
     }).compile();
 
     controller = module.get(FeatureFlagAdminController);
@@ -72,13 +70,13 @@ describe('FeatureFlagAdminController', () => {
   });
 
   it('should set an override', async () => {
-    const input = { tenantId: 't-1', enabled: true };
+    const input = { attributes: { tenantId: 't-1' }, enabled: true };
     await controller.setOverride('TEST_FLAG', input);
     expect(mockService.setOverride).toHaveBeenCalledWith('TEST_FLAG', input);
   });
 
   it('should remove an override', async () => {
-    const input = { tenantId: 't-1' };
+    const input = { attributes: { tenantId: 't-1' } };
     await controller.removeOverride('TEST_FLAG', input);
     expect(mockService.removeOverride).toHaveBeenCalledWith('TEST_FLAG', input);
   });

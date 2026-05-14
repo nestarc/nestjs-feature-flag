@@ -6,22 +6,31 @@ import {
   Delete,
   Body,
   Param,
+  UsePipes,
+  ValidationPipe,
 } from '@nestjs/common';
 import { FeatureFlagService } from '../services/feature-flag.service';
+import { FeatureFlagWithOverrides } from '../interfaces/feature-flag.interface';
 import {
-  CreateFeatureFlagInput,
-  UpdateFeatureFlagInput,
-  SetOverrideInput,
-  FeatureFlagWithOverrides,
-} from '../interfaces/feature-flag.interface';
-import { RemoveOverrideInput } from '../interfaces/feature-flag.interface';
+  CreateFeatureFlagDto,
+  RemoveOverrideDto,
+  SetOverrideDto,
+  UpdateFeatureFlagDto,
+} from './feature-flag-admin.dto';
 
 @Controller()
+@UsePipes(
+  new ValidationPipe({
+    whitelist: true,
+    forbidNonWhitelisted: true,
+    transform: true,
+  }),
+)
 export class FeatureFlagAdminController {
   constructor(private readonly service: FeatureFlagService) {}
 
   @Post()
-  create(@Body() input: CreateFeatureFlagInput): Promise<FeatureFlagWithOverrides> {
+  create(@Body() input: CreateFeatureFlagDto): Promise<FeatureFlagWithOverrides> {
     return this.service.create(input);
   }
 
@@ -38,7 +47,7 @@ export class FeatureFlagAdminController {
   @Patch(':key')
   update(
     @Param('key') key: string,
-    @Body() input: UpdateFeatureFlagInput,
+    @Body() input: UpdateFeatureFlagDto,
   ): Promise<FeatureFlagWithOverrides> {
     return this.service.update(key, input);
   }
@@ -49,18 +58,12 @@ export class FeatureFlagAdminController {
   }
 
   @Post(':key/overrides')
-  setOverride(
-    @Param('key') key: string,
-    @Body() input: SetOverrideInput,
-  ): Promise<void> {
+  setOverride(@Param('key') key: string, @Body() input: SetOverrideDto): Promise<void> {
     return this.service.setOverride(key, input);
   }
 
   @Delete(':key/overrides')
-  removeOverride(
-    @Param('key') key: string,
-    @Body() input: RemoveOverrideInput,
-  ): Promise<void> {
+  removeOverride(@Param('key') key: string, @Body() input: RemoveOverrideDto): Promise<void> {
     return this.service.removeOverride(key, input);
   }
 }

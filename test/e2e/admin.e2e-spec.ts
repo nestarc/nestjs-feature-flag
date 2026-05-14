@@ -52,20 +52,81 @@ describe('FeatureFlagAdmin REST (e2e)', () => {
       .send({ key: 'NEW_FLAG', enabled: true, description: 'e2e test' });
 
     expect(res.status).toBe(201);
-    expect(res.body).toEqual(
-      expect.objectContaining({ key: 'NEW_FLAG', enabled: true }),
+    expect(res.body).toEqual(expect.objectContaining({ key: 'NEW_FLAG', enabled: true }));
+  });
+
+  it('POST /feature-flags - should return 400 for empty key', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/feature-flags')
+      .send({ key: '', enabled: true });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('POST /feature-flags - should return 400 for invalid percentage', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/feature-flags')
+      .send({ key: 'BAD_PERCENTAGE', percentage: -5 });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('POST /feature-flags/:key/overrides - should reject missing attributes', async () => {
+    await request(app.getHttpServer())
+      .post('/feature-flags')
+      .send({ key: 'MISSING_ATTRIBUTES', enabled: false });
+
+    const res = await request(app.getHttpServer())
+      .post('/feature-flags/MISSING_ATTRIBUTES/overrides')
+      .send({ enabled: true });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('POST /feature-flags/:key/overrides - should reject legacy top-level tenantId body', async () => {
+    await request(app.getHttpServer())
+      .post('/feature-flags')
+      .send({ key: 'LEGACY_OVERRIDE_BODY', enabled: false });
+
+    const res = await request(app.getHttpServer())
+      .post('/feature-flags/LEGACY_OVERRIDE_BODY/overrides')
+      .send({ tenantId: 't-1', enabled: true });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('POST /feature-flags/:key/overrides - should accept attribute override body', async () => {
+    await request(app.getHttpServer())
+      .post('/feature-flags')
+      .send({ key: 'ATTRIBUTE_OVERRIDE_BODY', enabled: false });
+
+    const res = await request(app.getHttpServer())
+      .post('/feature-flags/ATTRIBUTE_OVERRIDE_BODY/overrides')
+      .send({
+        attributes: { tenantId: 't-1', plan: 'pro' },
+        enabled: true,
+        priority: 10,
+      });
+
+    expect(res.status).toBe(201);
+
+    const flagRes = await request(app.getHttpServer()).get(
+      '/feature-flags/ATTRIBUTE_OVERRIDE_BODY',
+    );
+    expect(flagRes.body.overrides[0]).toEqual(
+      expect.objectContaining({
+        attributes: { tenantId: 't-1', plan: 'pro' },
+        priority: 10,
+        enabled: true,
+      }),
     );
   });
 
   // ── READ (list) ────────────────────────────────
 
   it('GET /feature-flags — should list all non-archived flags', async () => {
-    await request(app.getHttpServer())
-      .post('/feature-flags')
-      .send({ key: 'A', enabled: true });
-    await request(app.getHttpServer())
-      .post('/feature-flags')
-      .send({ key: 'B', enabled: false });
+    await request(app.getHttpServer()).post('/feature-flags').send({ key: 'A', enabled: true });
+    await request(app.getHttpServer()).post('/feature-flags').send({ key: 'B', enabled: false });
 
     const res = await request(app.getHttpServer()).get('/feature-flags');
     expect(res.status).toBe(200);
@@ -92,9 +153,7 @@ describe('FeatureFlagAdmin REST (e2e)', () => {
   // ── UPDATE ─────────────────────────────────────
 
   it('PATCH /feature-flags/:key — should update a flag', async () => {
-    await request(app.getHttpServer())
-      .post('/feature-flags')
-      .send({ key: 'UPD', enabled: false });
+    await request(app.getHttpServer()).post('/feature-flags').send({ key: 'UPD', enabled: false });
 
     const res = await request(app.getHttpServer())
       .patch('/feature-flags/UPD')
@@ -107,9 +166,7 @@ describe('FeatureFlagAdmin REST (e2e)', () => {
   // ── ARCHIVE ────────────────────────────────────
 
   it('DELETE /feature-flags/:key — should archive a flag', async () => {
-    await request(app.getHttpServer())
-      .post('/feature-flags')
-      .send({ key: 'ARC', enabled: true });
+    await request(app.getHttpServer()).post('/feature-flags').send({ key: 'ARC', enabled: true });
 
     const res = await request(app.getHttpServer()).delete('/feature-flags/ARC');
     expect(res.status).toBe(200);
@@ -123,26 +180,24 @@ describe('FeatureFlagAdmin REST (e2e)', () => {
   // ── OVERRIDE: set ──────────────────────────────
 
   it('POST /feature-flags/:key/overrides — should set an override', async () => {
-    await request(app.getHttpServer())
-      .post('/feature-flags')
-      .send({ key: 'OVR', enabled: false });
+    await request(app.getHttpServer()).post('/feature-flags').send({ key: 'OVR', enabled: false });
 
     const res = await request(app.getHttpServer())
       .post('/feature-flags/OVR/overrides')
-      .send({ userId: 'u-1', enabled: true });
+      .send({ attributes: { userId: 'u-1' }, enabled: true });
 
     expect(res.status).toBe(201);
 
     // Verify override is persisted
     const flagRes = await request(app.getHttpServer()).get('/feature-flags/OVR');
     expect(flagRes.body.overrides).toHaveLength(1);
-    expect(flagRes.body.overrides[0].userId).toBe('u-1');
+    expect(flagRes.body.overrides[0].attributes).toEqual({ userId: 'u-1' });
   });
 
   it('POST /feature-flags/:key/overrides — should return 404 for unknown flag (Finding #1 fix)', async () => {
     const res = await request(app.getHttpServer())
       .post('/feature-flags/GHOST/overrides')
-      .send({ userId: 'u-1', enabled: true });
+      .send({ attributes: { userId: 'u-1' }, enabled: true });
 
     expect(res.status).toBe(404);
   });
@@ -150,16 +205,14 @@ describe('FeatureFlagAdmin REST (e2e)', () => {
   // ── OVERRIDE: remove ───────────────────────────
 
   it('DELETE /feature-flags/:key/overrides — should remove an override', async () => {
-    await request(app.getHttpServer())
-      .post('/feature-flags')
-      .send({ key: 'RMO', enabled: false });
+    await request(app.getHttpServer()).post('/feature-flags').send({ key: 'RMO', enabled: false });
     await request(app.getHttpServer())
       .post('/feature-flags/RMO/overrides')
-      .send({ userId: 'u-1', enabled: true });
+      .send({ attributes: { userId: 'u-1' }, enabled: true });
 
     const res = await request(app.getHttpServer())
       .delete('/feature-flags/RMO/overrides')
-      .send({ userId: 'u-1' });
+      .send({ attributes: { userId: 'u-1' } });
 
     expect(res.status).toBe(200);
 
@@ -170,7 +223,7 @@ describe('FeatureFlagAdmin REST (e2e)', () => {
   it('DELETE /feature-flags/:key/overrides — should return 404 for unknown flag', async () => {
     const res = await request(app.getHttpServer())
       .delete('/feature-flags/GHOST/overrides')
-      .send({ userId: 'u-1' });
+      .send({ attributes: { userId: 'u-1' } });
 
     expect(res.status).toBe(404);
   });
@@ -187,7 +240,7 @@ describe('FeatureFlagAdmin REST (e2e)', () => {
     // 2. Set override
     await request(app.getHttpServer())
       .post('/feature-flags/LIFECYCLE/overrides')
-      .send({ tenantId: 't-1', enabled: true });
+      .send({ attributes: { tenantId: 't-1' }, enabled: true });
 
     // 3. Read and verify
     const readRes = await request(app.getHttpServer()).get('/feature-flags/LIFECYCLE');
@@ -202,7 +255,7 @@ describe('FeatureFlagAdmin REST (e2e)', () => {
     // 5. Remove override
     await request(app.getHttpServer())
       .delete('/feature-flags/LIFECYCLE/overrides')
-      .send({ tenantId: 't-1' });
+      .send({ attributes: { tenantId: 't-1' } });
 
     const afterRemoveRes = await request(app.getHttpServer()).get('/feature-flags/LIFECYCLE');
     expect(afterRemoveRes.body.overrides).toHaveLength(0);
