@@ -14,6 +14,9 @@ SET "attributes" = jsonb_strip_nulls(
   )
 );
 
+-- v0.3.0 rejects empty targeting attributes. Legacy all-null/global overrides
+-- become empty objects during backfill and are intentionally removed by this
+-- breaking migration.
 DELETE FROM "feature_flag_overrides"
 WHERE "attributes" = '{}'::jsonb;
 
@@ -50,4 +53,4 @@ CREATE UNIQUE INDEX "uq_feature_flag_override_attributes"
 
 ALTER TABLE "feature_flag_overrides"
   ADD CONSTRAINT "chk_feature_flag_override_attributes_non_empty"
-  CHECK ("attributes" <> '{}'::jsonb);
+  CHECK (jsonb_typeof("attributes") = 'object' AND "attributes" <> '{}'::jsonb);
