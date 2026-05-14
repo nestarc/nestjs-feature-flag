@@ -24,18 +24,16 @@ model FeatureFlag {
 }
 
 model FeatureFlagOverride {
-  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  flagId      String   @map("flag_id") @db.Uuid
-  tenantId    String?  @map("tenant_id")
-  userId      String?  @map("user_id")
-  environment String?
-  enabled     Boolean
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  flagId     String   @map("flag_id") @db.Uuid
+  attributes Json     @default("{}")
+  priority   Int      @default(0)
+  enabled    Boolean
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz()
 
   flag FeatureFlag @relation(fields: [flagId], references: [id], onDelete: Cascade)
 
-  // Unique indexes defined in raw SQL migration (0001) to handle NULL equality correctly
   @@index([flagId], map: "idx_override_flag_id")
   @@map("feature_flag_overrides")
 }
