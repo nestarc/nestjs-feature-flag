@@ -1,7 +1,15 @@
-import { getPrisma, disconnectPrisma } from './helpers/prisma-test.helper';
+import {
+  getPrisma,
+  disconnectPrisma,
+  cleanDatabase,
+} from './helpers/prisma-test.helper';
 
 describe('attribute targeting migration schema (e2e)', () => {
   const prisma = getPrisma();
+
+  beforeEach(async () => {
+    await cleanDatabase();
+  });
 
   afterAll(async () => {
     await disconnectPrisma();
