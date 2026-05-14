@@ -51,7 +51,10 @@ describe('FeatureFlag HTTP (e2e)', () => {
 
     it('should return 200 when user has an override', async () => {
       await service.create({ key: 'GATED_ENDPOINT', enabled: false });
-      await service.setOverride('GATED_ENDPOINT', { userId: 'user-1', enabled: true });
+      await service.setOverride('GATED_ENDPOINT', {
+        attributes: { userId: 'user-1' },
+        enabled: true,
+      });
 
       const res = await request(app.getHttpServer())
         .get('/test/gated')

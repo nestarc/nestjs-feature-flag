@@ -96,7 +96,7 @@ describe('FeatureFlagService (integration)', () => {
   describe('overrides', () => {
     it('should apply a user override', async () => {
       await service.create({ key: 'USR_FLAG', enabled: false });
-      await service.setOverride('USR_FLAG', { userId: 'user-1', enabled: true });
+      await service.setOverride('USR_FLAG', { attributes: { userId: 'user-1' }, enabled: true });
 
       expect(await service.isEnabled('USR_FLAG', { userId: 'user-1' })).toBe(true);
       expect(await service.isEnabled('USR_FLAG')).toBe(false);
@@ -104,22 +104,22 @@ describe('FeatureFlagService (integration)', () => {
 
     it('should apply a tenant override', async () => {
       await service.create({ key: 'TNT_FLAG', enabled: false });
-      await service.setOverride('TNT_FLAG', { tenantId: 'tenant-1', enabled: true });
+      await service.setOverride('TNT_FLAG', { attributes: { tenantId: 'tenant-1' }, enabled: true });
 
       expect(await service.isEnabled('TNT_FLAG', { tenantId: 'tenant-1' })).toBe(true);
     });
 
     it('should apply an environment override', async () => {
       await service.create({ key: 'ENV_FLAG', enabled: false });
-      await service.setOverride('ENV_FLAG', { environment: 'test', enabled: true });
+      await service.setOverride('ENV_FLAG', { attributes: { environment: 'test' }, enabled: true });
 
       expect(await service.isEnabled('ENV_FLAG')).toBe(true);
     });
 
     it('should update existing override instead of creating a duplicate', async () => {
       await service.create({ key: 'DUP_FLAG', enabled: false });
-      await service.setOverride('DUP_FLAG', { userId: 'user-1', enabled: true });
-      await service.setOverride('DUP_FLAG', { userId: 'user-1', enabled: false });
+      await service.setOverride('DUP_FLAG', { attributes: { userId: 'user-1' }, enabled: true });
+      await service.setOverride('DUP_FLAG', { attributes: { userId: 'user-1' }, enabled: false });
 
       expect(await service.isEnabled('DUP_FLAG', { userId: 'user-1' })).toBe(false);
 
@@ -127,20 +127,27 @@ describe('FeatureFlagService (integration)', () => {
         where: { key: 'DUP_FLAG' },
         include: { overrides: true },
       });
-      const userOverrides = flag!.overrides.filter((o: any) => o.userId === 'user-1');
-      expect(userOverrides).toHaveLength(1);
+      expect(flag!.overrides).toHaveLength(1);
+      expect(flag!.overrides[0].attributes).toEqual({ userId: 'user-1' });
     });
 
-    it('should enforce uniqueness for global override (all NULLs)', async () => {
-      await service.create({ key: 'NULL_FLAG', enabled: false });
-      await service.setOverride('NULL_FLAG', { enabled: true });
-      await service.setOverride('NULL_FLAG', { enabled: false });
+    it('should enforce uniqueness for matching override attributes', async () => {
+      await service.create({ key: 'ATTR_DUP_FLAG', enabled: false });
+      await service.setOverride('ATTR_DUP_FLAG', {
+        attributes: { tenantId: 'tenant-1', plan: 'pro' },
+        enabled: true,
+      });
+      await service.setOverride('ATTR_DUP_FLAG', {
+        attributes: { tenantId: 'tenant-1', plan: 'pro' },
+        enabled: false,
+      });
 
       const flag = await prisma.featureFlag.findUnique({
-        where: { key: 'NULL_FLAG' },
+        where: { key: 'ATTR_DUP_FLAG' },
         include: { overrides: true },
       });
       expect(flag!.overrides).toHaveLength(1);
+      expect(flag!.overrides[0].attributes).toEqual({ tenantId: 'tenant-1', plan: 'pro' });
       expect(flag!.overrides[0].enabled).toBe(false);
     });
   });

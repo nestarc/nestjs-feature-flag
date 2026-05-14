@@ -144,7 +144,10 @@ describe('Redis Cache cross-instance invalidation (e2e)', () => {
     expect(await serviceB.isEnabled('OVR_CROSS', { userId: 'u-1' })).toBe(false);
 
     // Instance A sets a user override
-    await serviceA.setOverride('OVR_CROSS', { userId: 'u-1', enabled: true });
+    await serviceA.setOverride('OVR_CROSS', {
+      attributes: { userId: 'u-1' },
+      enabled: true,
+    });
 
     // Allow Pub/Sub propagation
     await new Promise((r) => setImmediate(r));

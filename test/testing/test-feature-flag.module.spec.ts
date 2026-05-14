@@ -60,8 +60,12 @@ describe('TestFeatureFlagModule', () => {
     const archived = await service.archive('X');
     expect(archived.archivedAt).not.toBeNull();
 
-    await expect(service.setOverride('X', {} as any)).resolves.toBeUndefined();
-    await expect(service.removeOverride('X', {} as any)).resolves.toBeUndefined();
+    await expect(
+      service.setOverride('X', { attributes: { userId: 'u-1' }, enabled: true }),
+    ).resolves.toBeUndefined();
+    await expect(
+      service.removeOverride('X', { attributes: { userId: 'u-1' } }),
+    ).resolves.toBeUndefined();
 
     const all = await service.findAll();
     expect(all).toHaveLength(1);
