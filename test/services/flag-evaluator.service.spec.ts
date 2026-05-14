@@ -169,6 +169,33 @@ describe('FlagEvaluatorService', () => {
       expect(result.result).toBe(true);
     });
 
+    it('should handle serialized createdAt values when tie-breaking', () => {
+      const flag = makeFlag({
+        overrides: [
+          makeOverride({
+            id: 'later-override',
+            attributes: { plan: 'pro' },
+            createdAt: '2026-01-02T00:00:00.000Z' as unknown as Date,
+            enabled: false,
+          }),
+          makeOverride({
+            id: 'earlier-override',
+            attributes: { plan: 'pro' },
+            createdAt: '2026-01-01T00:00:00.000Z' as unknown as Date,
+            enabled: true,
+          }),
+        ],
+      });
+      let result: ReturnType<FlagEvaluatorService['evaluate']> | undefined;
+
+      expect(() => {
+        result = evaluator.evaluate(flag, {
+          attributes: { plan: 'pro' },
+        });
+      }).not.toThrow();
+      expect(result?.result).toBe(true);
+    });
+
     it('should tie-break by id when createdAt is tied', () => {
       const createdAt = new Date('2026-01-01T00:00:00.000Z');
       const flag = makeFlag({

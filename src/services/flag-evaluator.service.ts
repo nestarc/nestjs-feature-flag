@@ -66,10 +66,15 @@ function compareOverrides(a: FlagOverride, b: FlagOverride): number {
     return priorityDelta;
   }
 
-  const createdAtDelta = a.createdAt.getTime() - b.createdAt.getTime();
+  const createdAtDelta = getOverrideCreatedAtTime(a) - getOverrideCreatedAtTime(b);
   if (createdAtDelta !== 0) {
     return createdAtDelta;
   }
 
   return a.id.localeCompare(b.id);
+}
+
+function getOverrideCreatedAtTime(override: FlagOverride): number {
+  const createdAt = override.createdAt as Date | string;
+  return createdAt instanceof Date ? createdAt.getTime() : new Date(createdAt).getTime();
 }
