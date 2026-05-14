@@ -24,6 +24,8 @@ export {
   UpdateFeatureFlagInput,
   SetOverrideInput,
   RemoveOverrideInput,
+  TargetingAttributeValue,
+  TargetingAttributes,
   FeatureFlagGuardOptions,
   FeatureFlagWithOverrides,
   FlagOverride,
@@ -51,7 +53,11 @@ export { MemoryCacheAdapter } from './cache/memory-cache.adapter';
 export { RedisCacheAdapter, type RedisCacheAdapterOptions } from './cache/redis-cache.adapter';
 
 // Repository
-export type { FeatureFlagRepository, OverrideCriteria } from './interfaces/feature-flag-repository.interface';
+export type {
+  FeatureFlagRepository,
+  OverrideCriteria,
+  UpdateOverrideInput,
+} from './interfaces/feature-flag-repository.interface';
 export { PrismaFeatureFlagRepository } from './repositories/prisma-feature-flag.repository';
 
 // Tenant context
