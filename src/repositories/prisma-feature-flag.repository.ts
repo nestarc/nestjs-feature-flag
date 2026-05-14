@@ -7,6 +7,7 @@ import {
 import {
   FeatureFlagRepository,
   OverrideCriteria,
+  UpdateOverrideInput,
 } from '../interfaces/feature-flag-repository.interface';
 import {
   CreateFeatureFlagInput,
@@ -113,28 +114,34 @@ export class PrismaFeatureFlagRepository implements FeatureFlagRepository {
 
   async findOverride(flagId: string, criteria: OverrideCriteria): Promise<{ id: string } | null> {
     return this.prisma.featureFlagOverride.findFirst({
-      where: { flagId, ...criteria },
+      where: {
+        flagId,
+        attributes: { equals: criteria.attributes },
+      },
       select: { id: true },
     });
   }
 
-  async createOverride(flagId: string, criteria: OverrideCriteria, enabled: boolean): Promise<void> {
+  async createOverride(
+    flagId: string,
+    criteria: OverrideCriteria,
+    enabled: boolean,
+    priority: number,
+  ): Promise<void> {
     try {
       await this.prisma.featureFlagOverride.create({
-        data: { flagId, ...criteria, enabled },
+        data: {
+          flagId,
+          attributes: criteria.attributes,
+          priority,
+          enabled,
+        },
       });
     } catch (error) {
       if (isPrismaError(error, 'P2002')) {
-        // Concurrent insert hit the unique index — fall back to update
-        const existing = await this.prisma.featureFlagOverride.findFirst({
-          where: { flagId, ...criteria },
-          select: { id: true },
-        });
+        const existing = await this.findOverride(flagId, criteria);
         if (existing) {
-          await this.prisma.featureFlagOverride.update({
-            where: { id: existing.id },
-            data: { enabled },
-          });
+          await this.updateOverride(existing.id, { enabled, priority });
           return;
         }
       }
@@ -142,10 +149,13 @@ export class PrismaFeatureFlagRepository implements FeatureFlagRepository {
     }
   }
 
-  async updateOverrideEnabled(id: string, enabled: boolean): Promise<void> {
+  async updateOverride(id: string, input: UpdateOverrideInput): Promise<void> {
     await this.prisma.featureFlagOverride.update({
       where: { id },
-      data: { enabled },
+      data: {
+        enabled: input.enabled,
+        priority: input.priority,
+      },
     });
   }
 

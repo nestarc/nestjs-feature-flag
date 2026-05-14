@@ -211,15 +211,18 @@ describe('PrismaFeatureFlagRepository', () => {
   });
 
   describe('findOverride', () => {
-    it('should delegate with select: { id: true }', async () => {
-      const criteria = { tenantId: 't1', userId: 'u1', environment: 'prod' };
+    it('should delegate with exact attributes equality', async () => {
+      const criteria = { attributes: { tenantId: 't1', plan: 'pro' } };
       const expected = { id: 'override-1' };
       prisma.featureFlagOverride.findFirst.mockResolvedValue(expected);
 
       const result = await repository.findOverride('flag-id', criteria);
 
       expect(prisma.featureFlagOverride.findFirst).toHaveBeenCalledWith({
-        where: { flagId: 'flag-id', tenantId: 't1', userId: 'u1', environment: 'prod' },
+        where: {
+          flagId: 'flag-id',
+          attributes: { equals: { tenantId: 't1', plan: 'pro' } },
+        },
         select: { id: true },
       });
       expect(result).toBe(expected);
@@ -228,48 +231,55 @@ describe('PrismaFeatureFlagRepository', () => {
     it('should return null when no override exists', async () => {
       prisma.featureFlagOverride.findFirst.mockResolvedValue(null);
 
-      const result = await repository.findOverride('flag-id', { tenantId: null, userId: null, environment: null });
+      const result = await repository.findOverride('flag-id', {
+        attributes: { tenantId: 'missing' },
+      });
 
       expect(result).toBeNull();
     });
   });
 
   describe('createOverride', () => {
-    it('should delegate to prisma.featureFlagOverride.create', async () => {
-      const criteria = { tenantId: 't1', userId: null, environment: 'staging' };
+    it('should delegate to prisma.featureFlagOverride.create with attributes and priority', async () => {
+      const criteria = { attributes: { tenantId: 't1', plan: 'pro' } };
       prisma.featureFlagOverride.create.mockResolvedValue({});
 
-      await repository.createOverride('flag-id', criteria, true);
+      await repository.createOverride('flag-id', criteria, true, 10);
 
       expect(prisma.featureFlagOverride.create).toHaveBeenCalledWith({
-        data: { flagId: 'flag-id', tenantId: 't1', userId: null, environment: 'staging', enabled: true },
+        data: {
+          flagId: 'flag-id',
+          attributes: { tenantId: 't1', plan: 'pro' },
+          priority: 10,
+          enabled: true,
+        },
       });
     });
 
     it('should fall back to update on unique violation (P2002 race)', async () => {
-      const criteria = { tenantId: null, userId: null, environment: null };
+      const criteria = { attributes: { tenantId: 't1' } };
       prisma.featureFlagOverride.create.mockRejectedValue({ code: 'P2002' });
       prisma.featureFlagOverride.findFirst.mockResolvedValue({ id: 'existing-id' });
       prisma.featureFlagOverride.update.mockResolvedValue({});
 
-      await repository.createOverride('flag-id', criteria, true);
+      await repository.createOverride('flag-id', criteria, true, 20);
 
       expect(prisma.featureFlagOverride.update).toHaveBeenCalledWith({
         where: { id: 'existing-id' },
-        data: { enabled: true },
+        data: { enabled: true, priority: 20 },
       });
     });
   });
 
-  describe('updateOverrideEnabled', () => {
-    it('should delegate with correct where and data', async () => {
+  describe('updateOverride', () => {
+    it('should delegate with enabled and priority', async () => {
       prisma.featureFlagOverride.update.mockResolvedValue({});
 
-      await repository.updateOverrideEnabled('override-1', false);
+      await repository.updateOverride('override-1', { enabled: false, priority: 5 });
 
       expect(prisma.featureFlagOverride.update).toHaveBeenCalledWith({
         where: { id: 'override-1' },
-        data: { enabled: false },
+        data: { enabled: false, priority: 5 },
       });
     });
   });

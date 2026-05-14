@@ -17,10 +17,9 @@ export interface UpdateFeatureFlagInput {
 }
 
 export interface SetOverrideInput {
-  tenantId?: string;
-  userId?: string;
-  environment?: string;
+  attributes: TargetingAttributes;
   enabled: boolean;
+  priority?: number;
 }
 
 export interface FeatureFlagGuardOptions {
@@ -47,14 +46,13 @@ export interface FeatureFlagWithOverrides {
 export interface FlagOverride {
   id: string;
   flagId: string;
-  tenantId: string | null;
-  userId: string | null;
-  environment: string | null;
+  attributes: TargetingAttributes;
+  priority: number;
   enabled: boolean;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface RemoveOverrideInput {
-  tenantId?: string;
-  userId?: string;
-  environment?: string;
+  attributes: TargetingAttributes;
 }

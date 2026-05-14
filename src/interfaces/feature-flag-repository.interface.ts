@@ -2,12 +2,16 @@ import {
   CreateFeatureFlagInput,
   UpdateFeatureFlagInput,
   FeatureFlagWithOverrides,
+  TargetingAttributes,
 } from './feature-flag.interface';
 
 export interface OverrideCriteria {
-  tenantId: string | null;
-  userId: string | null;
-  environment: string | null;
+  attributes: TargetingAttributes;
+}
+
+export interface UpdateOverrideInput {
+  enabled: boolean;
+  priority: number;
 }
 
 export interface FeatureFlagRepository {
@@ -18,7 +22,12 @@ export interface FeatureFlagRepository {
   findFlagIdByKey(key: string): Promise<string | null>;
   findAllActiveFlags(): Promise<FeatureFlagWithOverrides[]>;
   findOverride(flagId: string, criteria: OverrideCriteria): Promise<{ id: string } | null>;
-  createOverride(flagId: string, criteria: OverrideCriteria, enabled: boolean): Promise<void>;
-  updateOverrideEnabled(id: string, enabled: boolean): Promise<void>;
+  createOverride(
+    flagId: string,
+    criteria: OverrideCriteria,
+    enabled: boolean,
+    priority: number,
+  ): Promise<void>;
+  updateOverride(id: string, input: UpdateOverrideInput): Promise<void>;
   deleteOverride(id: string): Promise<void>;
 }
