@@ -309,6 +309,48 @@ describe('FlagEvaluatorService', () => {
       expect(result.targetingKey).toBe('tenant-1');
     });
 
+    it('should bucket by explicit userId, environment, and custom attributes', () => {
+      const flag = makeFlag({ percentage: 50 });
+
+      expect(
+        evaluator.evaluate(flag, { userId: 'user-1', tenantId: 'tenant-1' }, {
+          bucketBy: 'userId',
+        }).targetingKey,
+      ).toBe('user-1');
+      expect(
+        evaluator.evaluate(flag, { environment: 'production' }, {
+          bucketBy: 'environment',
+        }).targetingKey,
+      ).toBe('production');
+      expect(
+        evaluator.evaluate(flag, { attributes: { accountId: 'acct-1' } }, {
+          bucketBy: 'accountId',
+        }).targetingKey,
+      ).toBe('acct-1');
+    });
+
+    it('should fall back to global default when configured bucket values are missing', () => {
+      const flag = makeFlag({ percentage: 50, enabled: true });
+
+      const targetingKeyResult = evaluator.evaluate(flag, {}, {
+        bucketBy: 'targetingKey',
+      });
+      const nullAttributeResult = evaluator.evaluate(
+        flag,
+        { attributes: { accountId: null } },
+        { bucketBy: 'accountId' },
+      );
+
+      expect(targetingKeyResult).toEqual(
+        expect.objectContaining({
+          result: true,
+          source: 'global',
+          reason: 'PERCENTAGE_NO_TARGETING_KEY',
+        }),
+      );
+      expect(nullAttributeResult.reason).toBe('PERCENTAGE_NO_TARGETING_KEY');
+    });
+
     it('should distribute roughly according to percentage', () => {
       const flag = makeFlag({ key: 'ROLLOUT_FLAG', percentage: 30 });
       let enabledCount = 0;
