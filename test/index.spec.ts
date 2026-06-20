@@ -6,6 +6,10 @@ import {
   FeatureFlagGuard,
   FlagContext,
   FeatureFlagEvents,
+  defineFlags,
+  createFeatureFlagClient,
+  createFeatureFlagDecorators,
+  getFlagLifecycleStatus,
   FEATURE_FLAG_MODULE_OPTIONS,
   CACHE_ADAPTER,
   MemoryCacheAdapter,
@@ -23,6 +27,11 @@ describe('barrel exports', () => {
     expect(FlagContext).toBeDefined();
     expect(FeatureFlagEvents).toBeDefined();
     expect(FeatureFlagEvents.EVALUATED).toBe('feature-flag.evaluated');
+    expect(FeatureFlagEvents.EXPOSED).toBe('feature-flag.exposed');
+    expect(defineFlags).toBeDefined();
+    expect(createFeatureFlagClient).toBeDefined();
+    expect(createFeatureFlagDecorators).toBeDefined();
+    expect(getFlagLifecycleStatus).toBeDefined();
   });
 
   it('should export constants', () => {

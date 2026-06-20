@@ -50,7 +50,9 @@ describe('FlagEvaluatorService', () => {
       const flag = makeFlag({ archivedAt: new Date() });
       const result = evaluator.evaluate(flag, { userId: 'user-1' });
       expect(result.result).toBe(false);
+      expect(result.value).toBe(false);
       expect(result.source).toBe('global');
+      expect(result.reason).toBe('ARCHIVED');
     });
   });
 
@@ -67,6 +69,8 @@ describe('FlagEvaluatorService', () => {
 
       expect(result.result).toBe(true);
       expect(result.source).toBe('override');
+      expect(result.reason).toBe('OVERRIDE_MATCH');
+      expect(result.matchedOverrideId).toBe('override-1');
     });
 
     it('should not use an override when any attribute differs', () => {
@@ -242,6 +246,9 @@ describe('FlagEvaluatorService', () => {
       const result = evaluator.evaluate(flag, { userId: 'user-1' });
       expect(result.source).toBe('percentage');
       expect(typeof result.result).toBe('boolean');
+      expect(result.reason).toMatch(/^PERCENTAGE_/);
+      expect(result.targetingKey).toBe('user-1');
+      expect(typeof result.bucket).toBe('number');
     });
 
     it('should be deterministic for same userId + flagKey', () => {
@@ -256,6 +263,7 @@ describe('FlagEvaluatorService', () => {
       const result = evaluator.evaluate(flag, {});
       expect(result.result).toBe(true);
       expect(result.source).toBe('global');
+      expect(result.reason).toBe('PERCENTAGE_NO_TARGETING_KEY');
     });
 
     it('should return true for 100% rollout', () => {
@@ -263,6 +271,42 @@ describe('FlagEvaluatorService', () => {
       const result = evaluator.evaluate(flag, { userId: 'anyone' });
       expect(result.result).toBe(true);
       expect(result.source).toBe('percentage');
+      expect(result.reason).toBe('PERCENTAGE_MATCH');
+    });
+
+    it('should prefer explicit targetingKey for percentage rollout', () => {
+      const flag = makeFlag({ percentage: 50 });
+      const result = evaluator.evaluate(flag, {
+        userId: 'user-1',
+        targetingKey: 'stable-subject',
+      });
+
+      expect(result.targetingKey).toBe('stable-subject');
+      expect(typeof result.bucket).toBe('number');
+    });
+
+    it('should use metadata bucketBy before legacy userId fallback', () => {
+      const flag = makeFlag({ percentage: 50, metadata: { bucketBy: 'tenantId' } });
+      const result = evaluator.evaluate(flag, {
+        userId: 'user-1',
+        tenantId: 'tenant-1',
+      });
+
+      expect(result.targetingKey).toBe('tenant-1');
+    });
+
+    it('should let evaluator options override metadata bucketBy', () => {
+      const flag = makeFlag({ percentage: 50, metadata: { bucketBy: 'userId' } });
+      const result = evaluator.evaluate(
+        flag,
+        {
+          userId: 'user-1',
+          tenantId: 'tenant-1',
+        },
+        { bucketBy: 'tenantId' },
+      );
+
+      expect(result.targetingKey).toBe('tenant-1');
     });
 
     it('should distribute roughly according to percentage', () => {
@@ -293,6 +337,7 @@ describe('FlagEvaluatorService', () => {
     it('should report source as global', () => {
       const flag = makeFlag({ enabled: true });
       expect(evaluator.evaluate(flag, {}).source).toBe('global');
+      expect(evaluator.evaluate(flag, {}).reason).toBe('GLOBAL');
     });
   });
 });

@@ -8,6 +8,8 @@ import {
   Max,
   Min,
 } from 'class-validator';
+import { EvaluationContext } from '../interfaces/evaluation-context.interface';
+import { EvaluateBooleanOptions } from '../interfaces/evaluation-details.interface';
 import { TargetingAttributes } from '../interfaces/feature-flag.interface';
 import { IsTargetingAttributes } from './targeting-attributes.validator';
 
@@ -70,4 +72,22 @@ export class SetOverrideDto {
 export class RemoveOverrideDto {
   @IsTargetingAttributes()
   attributes!: TargetingAttributes;
+}
+
+export class EvaluateFeatureFlagDto implements EvaluateBooleanOptions {
+  @IsOptional()
+  @IsObject()
+  context?: EvaluationContext;
+
+  @IsOptional()
+  @IsBoolean()
+  defaultValue?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  trackExposure?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  includeContextInEvent?: boolean;
 }

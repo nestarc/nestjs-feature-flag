@@ -12,15 +12,17 @@ DB-backed feature flags for NestJS + Prisma + PostgreSQL -- attribute-targeted o
 
 - **Database-backed** -- flags stored in PostgreSQL via Prisma, no external service required
 - **Attribute-targeted overrides** -- exact-match targeting for tenants, users, environments, plans, regions, or custom dimensions
-- **Percentage rollouts** -- deterministic hashing (murmurhash3) for consistent per-user bucketing
+- **Percentage rollouts** -- deterministic hashing (murmurhash3) with explicit `targetingKey` / `bucketBy`
 - **Guard decorator** -- `@FeatureFlag()` automatically gates routes and controllers
 - **Bypass decorator** -- `@BypassFeatureFlag()` exempts health checks and public endpoints
-- **Programmatic evaluation** -- `isEnabled()` and `evaluateAll()` for service-layer logic
+- **Programmatic evaluation** -- `isEnabled()`, `evaluateBoolean()`, and `evaluateAll()` for service-layer logic
+- **Type-safe registry helpers** -- define flag keys, defaults, rollout bucket keys, exposure tracking, and lifecycle metadata in code
 - **Built-in caching** -- configurable TTL with manual invalidation; Redis Pub/Sub for multi-instance
 - **Pluggable persistence** -- `FeatureFlagRepository` interface for custom backends (Prisma default)
 - **Pluggable tenancy** -- `TenantContextProvider` interface for custom tenant resolution
 - **Admin REST API** -- opt-in `FeatureFlagAdminModule` with guard injection and proper error responses
 - **Event system** -- optional integration with `@nestjs/event-emitter` for audit and observability
+- **OpenFeature adapter** -- optional boolean-only provider at `@nestarc/feature-flag/openfeature`
 - **Testing utilities** -- drop-in `TestFeatureFlagModule` for unit and integration tests
 
 ## Installation
@@ -43,6 +45,9 @@ npm install @nestjs/event-emitter
 
 # Required only if you use RedisCacheAdapter
 npm install ioredis
+
+# Required only if you use the OpenFeature adapter with the SDK
+npm install @openfeature/server-sdk
 ```
 
 ## Redis Cache (Multi-Instance)
@@ -279,6 +284,14 @@ getPremiumContent() { ... }
 
 When the flag is disabled, the guard responds with the given `statusCode` (default `403`) and optional `fallback` body.
 
+Use `defaultValue` when a route should choose an invocation-specific fallback if a flag is missing or evaluation fails:
+
+```typescript
+@FeatureFlag('OPTIONAL_PREVIEW', { defaultValue: true })
+@Get('preview')
+getPreview() { ... }
+```
+
 ### Bypassing the guard
 
 Use `@BypassFeatureFlag()` on methods that should always be accessible, even when a class-level flag is applied:
@@ -347,6 +360,78 @@ Passing `null` explicitly clears that dimension, suppressing any ambient value f
 // Evaluate as if no user is present, even within a request with x-user-id
 const globalResult = await this.flags.isEnabled('MY_FLAG', { userId: null });
 ```
+
+### Detailed boolean evaluation
+
+Use `evaluateBoolean()` when you need to explain why a flag resolved to a value:
+
+```typescript
+const details = await this.flags.evaluateBoolean(
+  'NEW_CHECKOUT',
+  { targetingKey: 'tenant-1', tenantId: 'tenant-1' },
+  { defaultValue: false, trackExposure: true },
+);
+
+console.log(details);
+// {
+//   flagKey: 'NEW_CHECKOUT',
+//   value: true,
+//   result: true,
+//   source: 'percentage',
+//   reason: 'PERCENTAGE_MATCH',
+//   defaultUsed: false,
+//   bucket: 17,
+//   targetingKey: 'tenant-1',
+//   evaluationTimeMs: 1
+// }
+```
+
+Missing flags and evaluation errors return the selected default instead of throwing. Default priority is:
+
+1. Invocation `defaultValue`
+2. Registry `defaultValue`
+3. Module `defaultOnMissing`
+4. `false`
+
+### Type-safe flag registry
+
+```typescript
+import { defineFlags, createFeatureFlagClient } from '@nestarc/feature-flag';
+
+export const flags = defineFlags({
+  NEW_CHECKOUT: {
+    defaultValue: false,
+    bucketBy: 'tenantId',
+    trackExposure: true,
+    owner: 'payments',
+    tags: ['checkout'],
+    staleAt: '2026-09-01',
+    expiresAt: '2026-12-01',
+  },
+});
+
+const flagClient = createFeatureFlagClient(featureFlagService, flags);
+const enabled = await flagClient.isEnabled('NEW_CHECKOUT', { tenantId: 'tenant-1' });
+```
+
+You can also pass the registry to `FeatureFlagModule.forRoot({ flags })` so service-level fallback and `bucketBy` defaults apply to direct `FeatureFlagService` calls.
+
+### OpenFeature boolean adapter
+
+The optional adapter lives on a separate subpath and delegates boolean resolution to `FeatureFlagService`:
+
+```typescript
+import { createOpenFeatureBooleanProvider } from '@nestarc/feature-flag/openfeature';
+
+const provider = createOpenFeatureBooleanProvider(featureFlagService);
+const result = await provider.resolveBooleanEvaluation(
+  'NEW_CHECKOUT',
+  false,
+  { targetingKey: 'tenant-1', tenantId: 'tenant-1', plan: 'pro' },
+);
+```
+
+Only boolean evaluation is supported in v0.4.0. Variant flags and string/number/json remote config remain out of scope.
 
 ## Attribute Targeting
 
@@ -432,6 +517,7 @@ export class AppModule {}
 | Event constant                           | Event string                       | Payload type         |
 | ---------------------------------------- | ---------------------------------- | -------------------- |
 | `FeatureFlagEvents.EVALUATED`            | `feature-flag.evaluated`           | `FlagEvaluatedEvent` |
+| `FeatureFlagEvents.EXPOSED`              | `feature-flag.exposed`             | `FlagExposedEvent`   |
 | `FeatureFlagEvents.CREATED`              | `feature-flag.created`             | `FlagMutationEvent`  |
 | `FeatureFlagEvents.UPDATED`              | `feature-flag.updated`             | `FlagMutationEvent`  |
 | `FeatureFlagEvents.ARCHIVED`             | `feature-flag.archived`            | `FlagMutationEvent`  |
@@ -449,10 +535,12 @@ import { FeatureFlagEvents, FlagEvaluatedEvent } from '@nestarc/feature-flag';
 export class FlagAuditListener {
   @OnEvent(FeatureFlagEvents.EVALUATED)
   handleEvaluation(event: FlagEvaluatedEvent) {
-    console.log(`Flag ${event.flagKey} = ${event.result} (source: ${event.source})`);
+    console.log(`Flag ${event.flagKey} = ${event.result} (${event.reason})`);
   }
 }
 ```
+
+Exposure events are opt-in per call, registry entry, or flag metadata via `trackExposure`. They do not persist analytics; attach your own listener if you need sampling, batching, or storage.
 
 ## Testing
 
@@ -489,11 +577,29 @@ describe('DashboardController', () => {
 
 `TestFeatureFlagModule.register()` provides a global mock of `FeatureFlagService`:
 - `isEnabled(key)` returns the boolean you specified (defaulting to `false` for unregistered keys)
+- `evaluateBoolean(key)` returns `BooleanEvaluationDetails`
 - `evaluateAll()` returns the full flag map
 - `create()`, `update()`, `archive()`, `findByKey()`, `findAll()` return full `FeatureFlagWithOverrides` stub objects
 - `findByKey()` throws `NotFoundException` for unknown keys
 
-This is a **stateless boolean stub** -- write operations do not persist state across calls. For stateful test doubles, use your own mock implementation.
+For registry-based tests, use `registerRegistry()` and the injected controller:
+
+```typescript
+import {
+  TestFeatureFlagController,
+  TestFeatureFlagModule,
+} from '@nestarc/feature-flag/testing';
+
+const module = await Test.createTestingModule({
+  imports: [TestFeatureFlagModule.registerRegistry(flags)],
+}).compile();
+
+const testFlags = module.get(TestFeatureFlagController);
+testFlags.set('NEW_CHECKOUT', true);
+testFlags.reset();
+```
+
+The testing controller keeps state inside the compiled testing module. CRUD-style write methods on the mocked service still return stub objects and do not persist database rows.
 
 ## Evaluation Priority
 
@@ -503,10 +609,10 @@ When `isEnabled()` is called, flags are evaluated through the current cascade. T
 | -------- | ---------------------- | ------------------------------------------------------------------ |
 | 1        | **Archived**           | If the flag has `archivedAt` set, evaluation always returns `false` |
 | 2        | **Attribute override** | Best override whose attributes are all present in the evaluation context |
-| 3        | **Percentage rollout** | Deterministic hash of `flagKey + userId` (or `tenantId`) mod 100   |
+| 3        | **Percentage rollout** | Deterministic hash of `flagKey + targetingKey` mod 100             |
 | 4        | **Global default**     | The flag's `enabled` field                                         |
 
-Percentage rollout uses murmurhash3 for deterministic bucketing: the same user always gets the same result for a given flag, ensuring a consistent experience across requests.
+Percentage rollout uses murmurhash3 for deterministic bucketing. The targeting key is resolved in this order: explicit `context.targetingKey`, registry or metadata `bucketBy`, then the legacy `userId ?? tenantId` fallback.
 
 ## Configuration Reference
 
@@ -520,6 +626,7 @@ Percentage rollout uses murmurhash3 for deterministic bucketing: the same user a
 | `defaultOnMissing`  | `boolean`                         | `false`   | Value returned when a flag key does not exist in the database   |
 | `emitEvents`        | `boolean`                         | `false`   | Emit lifecycle events via `@nestjs/event-emitter`               |
 | `cacheAdapter`      | `CacheAdapter`                    | `MemoryCacheAdapter` | Pluggable cache backend (e.g. `RedisCacheAdapter`)  |
+| `flags`             | `FlagRegistry`                    | `undefined` | Optional typed registry for defaults, `bucketBy`, and exposure settings |
 
 ### FeatureFlagModuleRootOptions
 
@@ -587,6 +694,7 @@ export class AppModule {}
 | GET | `/feature-flags/:key` | Get a single flag | 404 not found |
 | PATCH | `/feature-flags/:key` | Update a flag | 404 not found, 400 invalid percentage |
 | DELETE | `/feature-flags/:key` | Archive a flag | 404 not found |
+| POST | `/feature-flags/:key/evaluate` | Evaluate a flag without mutating it | |
 | POST | `/feature-flags/:key/overrides` | Set an override | 404 flag not found |
 | DELETE | `/feature-flags/:key/overrides` | Remove an override | 404 flag not found |
 

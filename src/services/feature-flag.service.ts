@@ -7,6 +7,7 @@ import {
   SetOverrideInput,
   RemoveOverrideInput,
   FeatureFlagWithOverrides,
+  FlagMutationMetadata,
 } from '../interfaces/feature-flag.interface';
 import { EvaluationContext } from '../interfaces/evaluation-context.interface';
 import { CacheAdapter } from '../interfaces/cache-adapter.interface';
@@ -14,8 +15,17 @@ import { FeatureFlagRepository } from '../interfaces/feature-flag-repository.int
 import { FlagEvaluatorService } from './flag-evaluator.service';
 import { FlagContextResolver } from './flag-context-resolver';
 import { FlagEventPublisher } from './flag-event-publisher';
-import { FeatureFlagEvents, FlagEvaluatedEvent } from '../events/feature-flag.events';
+import {
+  FeatureFlagEvents,
+  FlagEvaluatedEvent,
+  FlagExposedEvent,
+} from '../events/feature-flag.events';
 import { normalizeTargetingAttributes } from '../utils/targeting-attributes';
+import {
+  BooleanEvaluationDetails,
+  EvaluateBooleanOptions,
+  EvaluationReason,
+} from '../interfaces/evaluation-details.interface';
 
 const CACHE_INVALIDATION_FAILED = 'feature-flag.cache.invalidation-failed';
 
@@ -34,26 +44,55 @@ export class FeatureFlagService {
     return this.options.cacheTtlMs ?? 30_000;
   }
 
-  async isEnabled(flagKey: string, explicitContext?: EvaluationContext): Promise<boolean> {
-    const flag = await this.resolveFlag(flagKey);
-    if (!flag) {
-      return this.options.defaultOnMissing ?? false;
-    }
+  async isEnabled(
+    flagKey: string,
+    explicitContext?: EvaluationContext,
+    evaluationOptions: EvaluateBooleanOptions = {},
+  ): Promise<boolean> {
+    return (await this.evaluateBoolean(flagKey, explicitContext, evaluationOptions)).value;
+  }
 
-    const context = this.contextResolver.resolve(explicitContext);
+  async evaluateBoolean(
+    flagKey: string,
+    explicitContext?: EvaluationContext,
+    evaluationOptions: EvaluateBooleanOptions = {},
+  ): Promise<BooleanEvaluationDetails> {
     const startTime = Date.now();
-    const { result, source } = this.evaluator.evaluate(flag, context);
-    const evaluationTimeMs = Date.now() - startTime;
+    let context: EvaluationContext = {};
 
-    this.eventPublisher.emit(FeatureFlagEvents.EVALUATED, {
-      flagKey,
-      result,
-      context,
-      source,
-      evaluationTimeMs,
-    } satisfies FlagEvaluatedEvent);
+    try {
+      context = this.contextResolver.resolve(explicitContext);
+      const flag = await this.resolveFlag(flagKey);
+      const registryDefinition = this.options.flags?.[flagKey];
+      const details = flag
+        ? {
+            ...this.evaluator.evaluate(flag, context, {
+              bucketBy: registryDefinition?.bucketBy,
+            }),
+            evaluationTimeMs: Date.now() - startTime,
+          }
+        : this.defaultDetails(flagKey, 'FLAG_NOT_FOUND', startTime, evaluationOptions);
 
-    return result;
+      this.emitEvaluation(details, context, evaluationOptions);
+      if (this.shouldTrackExposure(flagKey, flag, evaluationOptions)) {
+        this.emitExposure(details, context, evaluationOptions);
+      }
+
+      return details;
+    } catch (error) {
+      const details = this.defaultDetails(
+        flagKey,
+        'ERROR',
+        startTime,
+        evaluationOptions,
+        error,
+      );
+      this.emitEvaluation(details, context, evaluationOptions);
+      if (this.shouldTrackExposure(flagKey, null, evaluationOptions)) {
+        this.emitExposure(details, context, evaluationOptions);
+      }
+      return details;
+    }
   }
 
   async evaluateAll(explicitContext?: EvaluationContext): Promise<Record<string, boolean>> {
@@ -68,28 +107,54 @@ export class FeatureFlagService {
     return result;
   }
 
-  async create(input: CreateFeatureFlagInput): Promise<FeatureFlagWithOverrides> {
+  async create(
+    input: CreateFeatureFlagInput,
+    metadata: FlagMutationMetadata = {},
+  ): Promise<FeatureFlagWithOverrides> {
     const flag = await this.repository.createFlag(input);
     await this.safeInvalidateCache();
-    this.eventPublisher.emit(FeatureFlagEvents.CREATED, { flagKey: input.key, action: 'created' });
+    this.eventPublisher.emit(FeatureFlagEvents.CREATED, {
+      flagKey: input.key,
+      action: 'created',
+      ...metadata,
+    });
     return flag;
   }
 
-  async update(key: string, input: UpdateFeatureFlagInput): Promise<FeatureFlagWithOverrides> {
+  async update(
+    key: string,
+    input: UpdateFeatureFlagInput,
+    metadata: FlagMutationMetadata = {},
+  ): Promise<FeatureFlagWithOverrides> {
     const flag = await this.repository.updateFlag(key, input);
     await this.safeInvalidateCache(key);
-    this.eventPublisher.emit(FeatureFlagEvents.UPDATED, { flagKey: key, action: 'updated' });
+    this.eventPublisher.emit(FeatureFlagEvents.UPDATED, {
+      flagKey: key,
+      action: 'updated',
+      ...metadata,
+    });
     return flag;
   }
 
-  async archive(key: string): Promise<FeatureFlagWithOverrides> {
+  async archive(
+    key: string,
+    metadata: FlagMutationMetadata = {},
+  ): Promise<FeatureFlagWithOverrides> {
     const flag = await this.repository.archiveFlag(key);
     await this.safeInvalidateCache(key);
-    this.eventPublisher.emit(FeatureFlagEvents.ARCHIVED, { flagKey: key, action: 'archived' });
+    this.eventPublisher.emit(FeatureFlagEvents.ARCHIVED, {
+      flagKey: key,
+      action: 'archived',
+      ...metadata,
+    });
     return flag;
   }
 
-  async setOverride(key: string, input: SetOverrideInput): Promise<void> {
+  async setOverride(
+    key: string,
+    input: SetOverrideInput,
+    metadata: FlagMutationMetadata = {},
+  ): Promise<void> {
     const attributes = this.normalizeOverrideAttributes(input.attributes);
     const priority = input.priority ?? 0;
 
@@ -116,6 +181,7 @@ export class FeatureFlagService {
       enabled: input.enabled,
       priority,
       action: 'set',
+      ...metadata,
     });
   }
 
@@ -136,7 +202,11 @@ export class FeatureFlagService {
     return flag;
   }
 
-  async removeOverride(key: string, input: RemoveOverrideInput): Promise<void> {
+  async removeOverride(
+    key: string,
+    input: RemoveOverrideInput,
+    metadata: FlagMutationMetadata = {},
+  ): Promise<void> {
     const attributes = this.normalizeOverrideAttributes(input.attributes);
 
     const flagId = await this.repository.findFlagIdByKey(key);
@@ -155,6 +225,7 @@ export class FeatureFlagService {
       flagKey: key,
       attributes,
       action: 'removed',
+      ...metadata,
     });
   }
 
@@ -202,4 +273,99 @@ export class FeatureFlagService {
     await this.cacheAdapter.setAll(flags, this.cacheTtlMs);
     return flags;
   }
+
+  private defaultDetails(
+    flagKey: string,
+    reason: Extract<EvaluationReason, 'FLAG_NOT_FOUND' | 'ERROR'>,
+    startTime: number,
+    evaluationOptions: EvaluateBooleanOptions,
+    error?: unknown,
+  ): BooleanEvaluationDetails {
+    const defaultValue = this.resolveDefaultValue(flagKey, evaluationOptions);
+    const details: BooleanEvaluationDetails = {
+      flagKey,
+      value: defaultValue,
+      result: defaultValue,
+      source: 'default',
+      reason,
+      defaultUsed: true,
+      evaluationTimeMs: Date.now() - startTime,
+    };
+
+    if (error) {
+      details.errorCode = error instanceof Error ? error.constructor.name : 'Error';
+      details.errorMessage = error instanceof Error ? error.message : String(error);
+    }
+
+    return details;
+  }
+
+  private resolveDefaultValue(
+    flagKey: string,
+    evaluationOptions: EvaluateBooleanOptions,
+  ): boolean {
+    return (
+      evaluationOptions.defaultValue ??
+      this.options.flags?.[flagKey]?.defaultValue ??
+      this.options.defaultOnMissing ??
+      false
+    );
+  }
+
+  private shouldTrackExposure(
+    flagKey: string,
+    flag: FeatureFlagWithOverrides | null,
+    evaluationOptions: EvaluateBooleanOptions,
+  ): boolean {
+    return (
+      evaluationOptions.trackExposure ??
+      this.options.flags?.[flagKey]?.trackExposure ??
+      readBooleanMetadata(flag?.metadata, 'trackExposure') ??
+      false
+    );
+  }
+
+  private emitEvaluation(
+    details: BooleanEvaluationDetails,
+    context: EvaluationContext,
+    evaluationOptions: EvaluateBooleanOptions,
+  ): void {
+    const event: FlagEvaluatedEvent = {
+      ...details,
+      evaluationTimeMs: details.evaluationTimeMs ?? 0,
+    };
+
+    if (evaluationOptions.includeContextInEvent ?? true) {
+      event.context = context;
+    }
+
+    this.eventPublisher.emit(
+      FeatureFlagEvents.EVALUATED,
+      event as unknown as Record<string, unknown>,
+    );
+  }
+
+  private emitExposure(
+    details: BooleanEvaluationDetails,
+    context: EvaluationContext,
+    evaluationOptions: EvaluateBooleanOptions,
+  ): void {
+    const event: FlagExposedEvent = { ...details };
+    if (evaluationOptions.includeContextInEvent === true) {
+      event.context = context;
+    }
+
+    this.eventPublisher.emit(
+      FeatureFlagEvents.EXPOSED,
+      event as unknown as Record<string, unknown>,
+    );
+  }
+}
+
+function readBooleanMetadata(
+  metadata: Record<string, unknown> | undefined,
+  key: string,
+): boolean | undefined {
+  const value = metadata?.[key];
+  return typeof value === 'boolean' ? value : undefined;
 }

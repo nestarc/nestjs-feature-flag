@@ -1,6 +1,7 @@
 import { ModuleMetadata, Type } from '@nestjs/common';
 import { Request } from 'express';
 import { CacheAdapter } from './cache-adapter.interface';
+import { FlagRegistry } from './flag-registry.interface';
 
 export interface FeatureFlagModuleOptions {
   /** Current environment (e.g., 'development', 'staging', 'production') */
@@ -20,6 +21,9 @@ export interface FeatureFlagModuleOptions {
 
   /** Custom cache adapter implementation. If not provided, an in-memory cache is used. */
   cacheAdapter?: CacheAdapter;
+
+  /** Optional type-safe flag registry used for defaults and evaluation metadata. */
+  flags?: FlagRegistry;
 }
 
 export interface FeatureFlagModuleOptionsFactory {

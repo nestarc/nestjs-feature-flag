@@ -1,1 +1,5 @@
-export { TestFeatureFlagModule } from './test-feature-flag.module';
+export {
+  TestFeatureFlagController,
+  TestFeatureFlagModule,
+  TestFeatureFlagRegistryOptions,
+} from './test-feature-flag.module';

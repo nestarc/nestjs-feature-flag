@@ -36,7 +36,12 @@ export class FeatureFlagGuard implements CanActivate {
       this.reflector.get<FeatureFlagGuardOptions>(FEATURE_FLAG_OPTIONS_KEY, classRef) ??
       {};
 
-    const enabled = await this.featureFlagService.isEnabled(flagKey);
+    const enabled =
+      options.defaultValue === undefined
+        ? await this.featureFlagService.isEnabled(flagKey)
+        : await this.featureFlagService.isEnabled(flagKey, undefined, {
+            defaultValue: options.defaultValue,
+          });
 
     if (!enabled) {
       const statusCode = options.statusCode ?? 403;

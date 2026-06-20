@@ -11,8 +11,10 @@ import {
 } from '@nestjs/common';
 import { FeatureFlagService } from '../services/feature-flag.service';
 import { FeatureFlagWithOverrides } from '../interfaces/feature-flag.interface';
+import { BooleanEvaluationDetails } from '../interfaces/evaluation-details.interface';
 import {
   CreateFeatureFlagDto,
+  EvaluateFeatureFlagDto,
   RemoveOverrideDto,
   SetOverrideDto,
   UpdateFeatureFlagDto,
@@ -55,6 +57,15 @@ export class FeatureFlagAdminController {
   @Delete(':key')
   archive(@Param('key') key: string): Promise<FeatureFlagWithOverrides> {
     return this.service.archive(key);
+  }
+
+  @Post(':key/evaluate')
+  evaluate(
+    @Param('key') key: string,
+    @Body() input: EvaluateFeatureFlagDto,
+  ): Promise<BooleanEvaluationDetails> {
+    const { context, ...options } = input;
+    return this.service.evaluateBoolean(key, context, options);
   }
 
   @Post(':key/overrides')

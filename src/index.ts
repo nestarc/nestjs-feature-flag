@@ -20,6 +20,21 @@ export {
 } from './interfaces/feature-flag-options.interface';
 export { EvaluationContext } from './interfaces/evaluation-context.interface';
 export {
+  EvaluationSource,
+  EvaluationReason,
+  EvaluateBooleanOptions,
+  BooleanEvaluationDetails,
+  BucketBy,
+  FlagEvaluatorOptions,
+} from './interfaces/evaluation-details.interface';
+export {
+  FeatureFlagLifecycleMetadata,
+  FeatureFlagType,
+  FlagDefinition,
+  FlagRegistry,
+  FlagKey,
+} from './interfaces/flag-registry.interface';
+export {
   CreateFeatureFlagInput,
   UpdateFeatureFlagInput,
   SetOverrideInput,
@@ -29,12 +44,26 @@ export {
   FeatureFlagGuardOptions,
   FeatureFlagWithOverrides,
   FlagOverride,
+  FlagMutationMetadata,
 } from './interfaces/feature-flag.interface';
+
+// Registry helpers
+export {
+  defineFlags,
+  createFeatureFlagClient,
+  createFeatureFlagDecorators,
+  getFlagLifecycleStatus,
+  TypedFeatureFlagClient,
+  TypedFeatureFlagDecorators,
+  FlagLifecycleStatus,
+  FlagLifecycleStatusName,
+} from './flag-registry';
 
 // Events
 export {
   FeatureFlagEvents,
   FlagEvaluatedEvent,
+  FlagExposedEvent,
   FlagMutationEvent,
   FlagOverrideEvent,
 } from './events/feature-flag.events';

@@ -2,6 +2,33 @@
 
 All notable changes to `@nestarc/feature-flag` will be documented in this file.
 
+## [0.4.0] — 2026-06-20
+
+### Added
+- `FeatureFlagService.evaluateBoolean()` for detailed boolean evaluation results with `source`, `reason`, `defaultUsed`, `bucket`, `targetingKey`, and timing metadata
+- Invocation-level fallback via `EvaluateBooleanOptions.defaultValue`
+- `FeatureFlagGuardOptions.defaultValue` for route-level missing/error fallback
+- `EvaluationContext.targetingKey` and registry/metadata `bucketBy` support for explicit rollout bucketing
+- Type-safe registry helpers: `defineFlags()`, `createFeatureFlagClient()`, `createFeatureFlagDecorators()`, and lifecycle status helpers
+- `FeatureFlagModuleOptions.flags` for registry defaults, bucket keys, and exposure settings
+- `FeatureFlagEvents.EXPOSED` opt-in exposure events
+- Mutation event metadata fields: `actorId`, `actorType`, `reason`, `requestId`, and `correlationId`
+- `TestFeatureFlagModule.registerRegistry()` and injectable `TestFeatureFlagController`
+- Boolean-only OpenFeature provider adapter at `@nestarc/feature-flag/openfeature`
+- Admin API `POST /feature-flags/:key/evaluate` endpoint
+
+### Changed
+- `isEnabled()` now delegates to `evaluateBoolean()` and returns its `value`
+- Missing flags now emit a structured `feature-flag.evaluated` event with reason `FLAG_NOT_FOUND`
+- Percentage rollout keeps the legacy `userId ?? tenantId` fallback unless `targetingKey` or `bucketBy` is provided
+- `FlagEvaluatedEvent` now includes detailed evaluation fields
+- Package version is now `0.4.0`
+
+### Migration
+- No Prisma migration is required for v0.4.0 core features.
+- OpenFeature support is optional and does not require the SDK unless you wire the adapter into an OpenFeature setup.
+- Variant flags, reusable rule segments, persisted audit logs, and persisted exposure analytics remain out of scope for this release.
+
 ## [0.3.0] — 2026-05-12
 
 ### Added

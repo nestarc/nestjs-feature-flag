@@ -10,6 +10,9 @@ export interface EvaluationContext {
   /** Environment - auto-injected from module options. Can be explicitly overridden */
   environment?: string;
 
+  /** Explicit stable key for percentage rollout bucketing */
+  targetingKey?: string | null;
+
   /** Additional exact-match targeting attributes */
   attributes?: TargetingAttributes;
 }

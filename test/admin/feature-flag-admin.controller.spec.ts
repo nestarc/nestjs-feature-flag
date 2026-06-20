@@ -23,6 +23,15 @@ const mockService = {
   archive: jest.fn().mockResolvedValue({ ...mockFlag, archivedAt: new Date() }),
   setOverride: jest.fn().mockResolvedValue(undefined),
   removeOverride: jest.fn().mockResolvedValue(undefined),
+  evaluateBoolean: jest.fn().mockResolvedValue({
+    flagKey: 'TEST_FLAG',
+    value: true,
+    result: true,
+    source: 'global',
+    reason: 'GLOBAL',
+    defaultUsed: false,
+    evaluationTimeMs: 1,
+  }),
 };
 
 describe('FeatureFlagAdminController', () => {
@@ -79,5 +88,22 @@ describe('FeatureFlagAdminController', () => {
     const input = { attributes: { tenantId: 't-1' } };
     await controller.removeOverride('TEST_FLAG', input);
     expect(mockService.removeOverride).toHaveBeenCalledWith('TEST_FLAG', input);
+  });
+
+  it('should evaluate a flag with explicit context and options', async () => {
+    const input = {
+      context: { userId: 'user-1', tenantId: 'tenant-1' },
+      defaultValue: true,
+      trackExposure: true,
+    };
+
+    const result = await controller.evaluate('TEST_FLAG', input);
+
+    expect(mockService.evaluateBoolean).toHaveBeenCalledWith(
+      'TEST_FLAG',
+      { userId: 'user-1', tenantId: 'tenant-1' },
+      { defaultValue: true, trackExposure: true },
+    );
+    expect(result.value).toBe(true);
   });
 });

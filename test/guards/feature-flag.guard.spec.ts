@@ -104,6 +104,39 @@ describe('FeatureFlagGuard', () => {
     }
   });
 
+  it('should pass invocation defaultValue to FeatureFlagService', async () => {
+    const handler = () => {};
+    jest.spyOn(reflector, 'get').mockImplementation((key: unknown) => {
+      if (key === FEATURE_FLAG_KEY) return 'MISSING_FLAG';
+      if (key === FEATURE_FLAG_OPTIONS_KEY) return { defaultValue: true };
+      return undefined;
+    });
+    (mockService.isEnabled as jest.Mock).mockResolvedValue(true);
+
+    const ctx = createMockContext(handler);
+    const result = await guard.canActivate(ctx);
+
+    expect(result).toBe(true);
+    expect(mockService.isEnabled).toHaveBeenCalledWith('MISSING_FLAG', undefined, {
+      defaultValue: true,
+    });
+  });
+
+  it('should remain fail-closed when defaultValue is not set', async () => {
+    const handler = () => {};
+    jest.spyOn(reflector, 'get').mockImplementation((key: unknown) => {
+      if (key === FEATURE_FLAG_KEY) return 'MISSING_FLAG';
+      if (key === FEATURE_FLAG_OPTIONS_KEY) return {};
+      return undefined;
+    });
+    (mockService.isEnabled as jest.Mock).mockResolvedValue(false);
+
+    const ctx = createMockContext(handler);
+
+    await expect(guard.canActivate(ctx)).rejects.toThrow(HttpException);
+    expect(mockService.isEnabled).toHaveBeenCalledWith('MISSING_FLAG');
+  });
+
   it('should check class-level flag key when handler has none', async () => {
     const handler = () => {};
     const classRef = class TestController {};

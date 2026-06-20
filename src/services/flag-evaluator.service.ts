@@ -1,44 +1,66 @@
 import { Injectable } from '@nestjs/common';
-import { FeatureFlagWithOverrides, FlagOverride } from '../interfaces/feature-flag.interface';
+import {
+  FeatureFlagWithOverrides,
+  FlagOverride,
+  TargetingAttributeValue,
+} from '../interfaces/feature-flag.interface';
 import { EvaluationContext } from '../interfaces/evaluation-context.interface';
 import { murmurhash3 } from '../utils/hash';
-import { FlagEvaluatedEvent } from '../events/feature-flag.events';
 import { matchesTargetingAttributes } from '../utils/targeting-attributes';
+import {
+  BooleanEvaluationDetails,
+  BucketBy,
+  EvaluationSource,
+  FlagEvaluatorOptions,
+} from '../interfaces/evaluation-details.interface';
 
-type EvaluationSource = FlagEvaluatedEvent['source'];
-
-export interface EvaluationResult {
-  result: boolean;
-  source: EvaluationSource;
-}
+export type EvaluationResult = BooleanEvaluationDetails;
 
 @Injectable()
 export class FlagEvaluatorService {
-  evaluate(flag: FeatureFlagWithOverrides, context: EvaluationContext): EvaluationResult {
+  evaluate(
+    flag: FeatureFlagWithOverrides,
+    context: EvaluationContext,
+    options: FlagEvaluatorOptions = {},
+  ): EvaluationResult {
     if (flag.archivedAt) {
-      return { result: false, source: 'global' };
+      return this.result(flag.key, false, 'global', 'ARCHIVED');
     }
 
     const override = this.findMatchingOverride(flag.overrides, context);
     if (override) {
-      return { result: override.enabled, source: 'override' };
+      return this.result(flag.key, override.enabled, 'override', 'OVERRIDE_MATCH', {
+        matchedOverrideId: override.id,
+      });
     }
 
     if (flag.percentage > 0) {
       if (flag.percentage === 100) {
-        return { result: true, source: 'percentage' };
+        return this.result(flag.key, true, 'percentage', 'PERCENTAGE_MATCH');
       }
 
-      const hashKey = context.userId ?? context.tenantId ?? '';
-      if (!hashKey) {
-        return { result: flag.enabled, source: 'global' };
+      const targetingKey = this.resolveTargetingKey(flag, context, options.bucketBy);
+      if (!targetingKey) {
+        return this.result(
+          flag.key,
+          flag.enabled,
+          'global',
+          'PERCENTAGE_NO_TARGETING_KEY',
+        );
       }
 
-      const bucket = murmurhash3(flag.key + hashKey) % 100;
-      return { result: bucket < flag.percentage, source: 'percentage' };
+      const bucket = murmurhash3(flag.key + targetingKey) % 100;
+      const enabled = bucket < flag.percentage;
+      return this.result(
+        flag.key,
+        enabled,
+        'percentage',
+        enabled ? 'PERCENTAGE_MATCH' : 'PERCENTAGE_MISS',
+        { bucket, targetingKey },
+      );
     }
 
-    return { result: flag.enabled, source: 'global' };
+    return this.result(flag.key, flag.enabled, 'global', 'GLOBAL');
   }
 
   private findMatchingOverride(
@@ -53,6 +75,74 @@ export class FlagEvaluatorService {
         .sort(compareOverrides)[0] ?? null
     );
   }
+
+  private resolveTargetingKey(
+    flag: FeatureFlagWithOverrides,
+    context: EvaluationContext,
+    bucketBy?: BucketBy,
+  ): string {
+    if (context.targetingKey) {
+      return context.targetingKey;
+    }
+
+    const configuredBucketBy = bucketBy ?? this.getMetadataBucketBy(flag.metadata);
+    if (configuredBucketBy) {
+      const configuredValue = this.readBucketValue(context, configuredBucketBy);
+      if (configuredValue) {
+        return configuredValue;
+      }
+    }
+
+    return context.userId ?? context.tenantId ?? '';
+  }
+
+  private getMetadataBucketBy(metadata: Record<string, unknown>): BucketBy | undefined {
+    const bucketBy = metadata.bucketBy;
+    return typeof bucketBy === 'string' && bucketBy.length > 0 ? bucketBy : undefined;
+  }
+
+  private readBucketValue(context: EvaluationContext, bucketBy: BucketBy): string {
+    if (bucketBy === 'userId') {
+      return context.userId ?? '';
+    }
+    if (bucketBy === 'tenantId') {
+      return context.tenantId ?? '';
+    }
+    if (bucketBy === 'environment') {
+      return context.environment ?? '';
+    }
+    if (bucketBy === 'targetingKey') {
+      return context.targetingKey ?? '';
+    }
+
+    return stringifyBucketValue(context.attributes?.[bucketBy]);
+  }
+
+  private result(
+    flagKey: string,
+    value: boolean,
+    source: EvaluationSource,
+    reason: EvaluationResult['reason'],
+    details: Partial<EvaluationResult> = {},
+  ): EvaluationResult {
+    return {
+      flagKey,
+      value,
+      result: value,
+      source,
+      reason,
+      defaultUsed: false,
+      ...details,
+    };
+  }
+}
+
+function stringifyBucketValue(value: TargetingAttributeValue | undefined): string {
+  if (value === undefined || value === null) {
+    return '';
+  }
+
+  return String(value);
 }
 
 function compareOverrides(a: FlagOverride, b: FlagOverride): number {

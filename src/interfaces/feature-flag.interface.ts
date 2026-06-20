@@ -28,6 +28,9 @@ export interface FeatureFlagGuardOptions {
 
   /** Response body when flag is OFF */
   fallback?: Record<string, unknown>;
+
+  /** Invocation-level default when the guard cannot find or evaluate the flag. Default: false */
+  defaultValue?: boolean;
 }
 
 export interface FeatureFlagWithOverrides {
@@ -55,4 +58,12 @@ export interface FlagOverride {
 
 export interface RemoveOverrideInput {
   attributes: TargetingAttributes;
+}
+
+export interface FlagMutationMetadata {
+  actorId?: string;
+  actorType?: string;
+  reason?: string;
+  requestId?: string;
+  correlationId?: string;
 }

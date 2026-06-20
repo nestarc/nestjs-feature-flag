@@ -1,6 +1,10 @@
 import { Test } from '@nestjs/testing';
-import { TestFeatureFlagModule } from '../../src/testing/test-feature-flag.module';
+import {
+  TestFeatureFlagController,
+  TestFeatureFlagModule,
+} from '../../src/testing/test-feature-flag.module';
 import { FeatureFlagService } from '../../src/services/feature-flag.service';
+import { defineFlags } from '../../src/flag-registry';
 
 describe('TestFeatureFlagModule', () => {
   it('should provide a mock FeatureFlagService with preset flags', async () => {
@@ -91,5 +95,56 @@ describe('TestFeatureFlagModule', () => {
 
     const service = module.get(FeatureFlagService);
     await expect(service.findByKey('UNKNOWN')).rejects.toThrow('not found');
+  });
+
+  it('should register typed registry defaults and per-test overrides', async () => {
+    const flags = defineFlags({
+      FEATURE_A: { defaultValue: false },
+      FEATURE_B: { defaultValue: true },
+    });
+
+    const module = await Test.createTestingModule({
+      imports: [
+        TestFeatureFlagModule.registerRegistry(flags, {
+          overrides: { FEATURE_A: true },
+        }),
+      ],
+    }).compile();
+
+    const service = module.get(FeatureFlagService);
+
+    expect(await service.isEnabled('FEATURE_A')).toBe(true);
+    expect(await service.isEnabled('FEATURE_B')).toBe(true);
+    expect(await service.evaluateAll()).toEqual({ FEATURE_A: true, FEATURE_B: true });
+  });
+
+  it('should expose a controller for setting, resetting, and reading details', async () => {
+    const flags = defineFlags({
+      FEATURE_A: { defaultValue: false },
+      FEATURE_B: { defaultValue: true },
+    });
+
+    const module = await Test.createTestingModule({
+      imports: [TestFeatureFlagModule.registerRegistry(flags)],
+    }).compile();
+
+    const service = module.get(FeatureFlagService);
+    const controller = module.get(TestFeatureFlagController);
+
+    controller.set('FEATURE_A', true);
+    expect(await service.isEnabled('FEATURE_A')).toBe(true);
+    expect(controller.getDetails('FEATURE_A')).toEqual(
+      expect.objectContaining({
+        flagKey: 'FEATURE_A',
+        value: true,
+        source: 'default',
+        reason: 'GLOBAL',
+        defaultUsed: false,
+      }),
+    );
+
+    controller.reset();
+    expect(await service.isEnabled('FEATURE_A')).toBe(false);
+    expect(await service.isEnabled('FEATURE_B')).toBe(true);
   });
 });

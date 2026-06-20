@@ -7,6 +7,7 @@ import { FeatureFlagModuleOptions } from '../../src/interfaces/feature-flag-opti
 import { FeatureFlagWithOverrides } from '../../src/interfaces/feature-flag.interface';
 import { FeatureFlagRepository } from '../../src/interfaces/feature-flag-repository.interface';
 import { CacheAdapter } from '../../src/interfaces/cache-adapter.interface';
+import { FeatureFlagEvents } from '../../src/events/feature-flag.events';
 
 function makeFlagRecord(key: string, overrides: Partial<FeatureFlagWithOverrides> = {}): FeatureFlagWithOverrides {
   return {
@@ -182,6 +183,165 @@ describe('FeatureFlagService', () => {
 
       const result = await service.isEnabled('MY_FLAG');
       expect(result).toBe(true);
+    });
+  });
+
+  describe('evaluateBoolean', () => {
+    it('should return detailed evaluation information for an existing flag', async () => {
+      const flag = makeFlagRecord('MY_FLAG', { enabled: true });
+      mockRepository.findFlagByKey.mockResolvedValue(flag);
+
+      const result = await service.evaluateBoolean('MY_FLAG');
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          flagKey: 'MY_FLAG',
+          value: true,
+          result: true,
+          source: 'global',
+          reason: 'GLOBAL',
+          defaultUsed: false,
+        }),
+      );
+      expect(typeof result.evaluationTimeMs).toBe('number');
+    });
+
+    it('should use invocation default before module default when a flag is missing', async () => {
+      const serviceWithModuleDefault = new FeatureFlagService(
+        { ...options, defaultOnMissing: false },
+        mockRepository,
+        mockCacheAdapter,
+        evaluator,
+        mockContextResolver as any,
+        mockEventPublisher as any,
+      );
+      mockRepository.findFlagByKey.mockResolvedValue(null);
+
+      const result = await serviceWithModuleDefault.evaluateBoolean('UNKNOWN', undefined, {
+        defaultValue: true,
+      });
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          flagKey: 'UNKNOWN',
+          value: true,
+          result: true,
+          source: 'default',
+          reason: 'FLAG_NOT_FOUND',
+          defaultUsed: true,
+        }),
+      );
+    });
+
+    it('should use registry default before module default when a flag is missing', async () => {
+      const serviceWithRegistry = new FeatureFlagService(
+        {
+          ...options,
+          defaultOnMissing: false,
+          flags: {
+            UNKNOWN: { defaultValue: true },
+          },
+        },
+        mockRepository,
+        mockCacheAdapter,
+        evaluator,
+        mockContextResolver as any,
+        mockEventPublisher as any,
+      );
+      mockRepository.findFlagByKey.mockResolvedValue(null);
+
+      const result = await serviceWithRegistry.evaluateBoolean('UNKNOWN');
+
+      expect(result.value).toBe(true);
+      expect(result.defaultUsed).toBe(true);
+      expect(result.reason).toBe('FLAG_NOT_FOUND');
+    });
+
+    it('should return default details instead of throwing when evaluation fails', async () => {
+      mockRepository.findFlagByKey.mockRejectedValue(new Error('db unavailable'));
+
+      const result = await service.evaluateBoolean('BROKEN', undefined, {
+        defaultValue: true,
+      });
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          flagKey: 'BROKEN',
+          value: true,
+          result: true,
+          source: 'default',
+          reason: 'ERROR',
+          defaultUsed: true,
+          errorCode: 'Error',
+          errorMessage: 'db unavailable',
+        }),
+      );
+    });
+
+    it('should pass registry bucketBy to the evaluator', async () => {
+      const serviceWithRegistry = new FeatureFlagService(
+        {
+          ...options,
+          flags: {
+            ROLLOUT: { defaultValue: false, bucketBy: 'tenantId' },
+          },
+        },
+        mockRepository,
+        mockCacheAdapter,
+        evaluator,
+        mockContextResolver as any,
+        mockEventPublisher as any,
+      );
+      const flag = makeFlagRecord('ROLLOUT', {
+        percentage: 50,
+        metadata: { bucketBy: 'userId' },
+      });
+      mockRepository.findFlagByKey.mockResolvedValue(flag);
+      mockContextResolver.resolve.mockReturnValue({
+        userId: 'user-1',
+        tenantId: 'tenant-1',
+      });
+
+      const result = await serviceWithRegistry.evaluateBoolean('ROLLOUT');
+
+      expect(result.targetingKey).toBe('tenant-1');
+    });
+
+    it('should emit exposure event when requested by invocation options', async () => {
+      const flag = makeFlagRecord('MY_FLAG', { enabled: true });
+      mockRepository.findFlagByKey.mockResolvedValue(flag);
+
+      await service.evaluateBoolean('MY_FLAG', undefined, { trackExposure: true });
+
+      expect(mockEventPublisher.emit).toHaveBeenCalledWith(
+        FeatureFlagEvents.EXPOSED,
+        expect.not.objectContaining({ context: expect.anything() }),
+      );
+      expect(mockEventPublisher.emit).toHaveBeenCalledWith(
+        FeatureFlagEvents.EXPOSED,
+        expect.objectContaining({
+          flagKey: 'MY_FLAG',
+          value: true,
+          source: 'global',
+          reason: 'GLOBAL',
+          defaultUsed: false,
+        }),
+      );
+    });
+
+    it('should emit exposure event when requested by flag metadata', async () => {
+      const flag = makeFlagRecord('MY_FLAG', {
+        enabled: true,
+        metadata: { trackExposure: true },
+      });
+      mockRepository.findFlagByKey.mockResolvedValue(flag);
+
+      await service.evaluateBoolean('MY_FLAG');
+
+      expect(mockEventPublisher.emit).toHaveBeenCalledWith(
+        FeatureFlagEvents.EXPOSED,
+        expect.objectContaining({ flagKey: 'MY_FLAG', value: true }),
+      );
     });
   });
 
@@ -397,11 +557,19 @@ describe('FeatureFlagService', () => {
       );
     });
 
-    it('should not emit evaluation event when flag not found', async () => {
+    it('should emit default evaluation event when flag not found', async () => {
       mockRepository.findFlagByKey.mockResolvedValue(null);
 
       await service.isEnabled('UNKNOWN');
-      expect(mockEventPublisher.emit).not.toHaveBeenCalled();
+      expect(mockEventPublisher.emit).toHaveBeenCalledWith(
+        FeatureFlagEvents.EVALUATED,
+        expect.objectContaining({
+          flagKey: 'UNKNOWN',
+          result: false,
+          reason: 'FLAG_NOT_FOUND',
+          defaultUsed: true,
+        }),
+      );
     });
 
     it('should emit CREATED event on create', async () => {
@@ -412,6 +580,35 @@ describe('FeatureFlagService', () => {
       expect(mockEventPublisher.emit).toHaveBeenCalledWith(
         expect.stringContaining('created'),
         expect.objectContaining({ flagKey: 'NEW_FLAG', action: 'created' }),
+      );
+    });
+
+    it('should include mutation metadata on create events', async () => {
+      const created = makeFlagRecord('NEW_FLAG', { enabled: true });
+      mockRepository.createFlag.mockResolvedValue(created);
+
+      await service.create(
+        { key: 'NEW_FLAG', enabled: true },
+        {
+          actorId: 'user-1',
+          actorType: 'user',
+          reason: 'rollout',
+          requestId: 'req-1',
+          correlationId: 'corr-1',
+        },
+      );
+
+      expect(mockEventPublisher.emit).toHaveBeenCalledWith(
+        FeatureFlagEvents.CREATED,
+        expect.objectContaining({
+          flagKey: 'NEW_FLAG',
+          action: 'created',
+          actorId: 'user-1',
+          actorType: 'user',
+          reason: 'rollout',
+          requestId: 'req-1',
+          correlationId: 'corr-1',
+        }),
       );
     });
 
@@ -455,6 +652,30 @@ describe('FeatureFlagService', () => {
           enabled: true,
           priority: 5,
           action: 'set',
+        }),
+      );
+    });
+
+    it('should include mutation metadata on override events', async () => {
+      mockRepository.findFlagIdByKey.mockResolvedValue('uuid-1');
+      mockRepository.findOverride.mockResolvedValue(null);
+      mockRepository.createOverride.mockResolvedValue(undefined);
+
+      await service.setOverride(
+        'MY_FLAG',
+        {
+          attributes: { tenantId: 'tenant-1' },
+          enabled: true,
+        },
+        { actorId: 'ops-1', reason: 'tenant allowlist' },
+      );
+
+      expect(mockEventPublisher.emit).toHaveBeenCalledWith(
+        FeatureFlagEvents.OVERRIDE_SET,
+        expect.objectContaining({
+          flagKey: 'MY_FLAG',
+          actorId: 'ops-1',
+          reason: 'tenant allowlist',
         }),
       );
     });
