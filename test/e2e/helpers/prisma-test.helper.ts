@@ -1,12 +1,17 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { PrismaClient } from '../../../generated/prisma/client';
 
 let prisma: PrismaClient;
 
 export function getPrisma(): PrismaClient {
   if (!prisma) {
-    prisma = new PrismaClient({
-      datasources: { db: { url: process.env.DATABASE_URL } },
-    });
+    const connectionString = process.env.DATABASE_URL;
+    if (!connectionString) {
+      throw new Error('DATABASE_URL is required for Prisma E2E tests');
+    }
+
+    const adapter = new PrismaPg({ connectionString });
+    prisma = new PrismaClient({ adapter });
   }
   return prisma;
 }

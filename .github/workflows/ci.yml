@@ -38,8 +38,11 @@ jobs:
 
       - run: npm ci
 
+      - name: Validate Prisma schema
+        run: npx prisma validate
+
       - name: Generate Prisma client
-        run: npx prisma generate
+        run: npm run prisma:generate
 
       - name: Lint
         run: npm run lint

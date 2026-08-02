@@ -34,8 +34,12 @@ npm install @nestarc/feature-flag
 ### Peer dependencies
 
 ```bash
-npm install @nestjs/common @nestjs/core @prisma/client class-transformer class-validator rxjs reflect-metadata
+npm install @nestjs/common @nestjs/core @prisma/client @prisma/adapter-pg pg class-transformer class-validator rxjs reflect-metadata
+npm install --save-dev prisma
 ```
+
+Prisma 7 requires Node.js 20.19+, 22.12+, or 24+. This package follows the
+same runtime requirement.
 
 ### Optional
 
@@ -75,6 +79,45 @@ FeatureFlagModule.forRoot({
 When a flag is updated on any instance, all other instances are notified via Pub/Sub and invalidate their cache immediately — eliminating the stale-cache window.
 
 ## Prisma Schema
+
+Prisma 7 keeps connection URLs in `prisma.config.ts` and requires a database
+driver adapter at runtime. A minimal PostgreSQL setup is:
+
+```ts
+// prisma.config.ts
+import 'dotenv/config';
+import { defineConfig, env } from 'prisma/config';
+
+export default defineConfig({
+  schema: 'prisma/schema.prisma',
+  migrations: { path: 'prisma/migrations' },
+  datasource: { url: env('DATABASE_URL') },
+});
+```
+
+```prisma
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+```
+
+Create the client with `@prisma/adapter-pg`, then pass that instance to
+`FeatureFlagModule`:
+
+```ts
+import { PrismaPg } from '@prisma/adapter-pg';
+import { PrismaClient } from './generated/prisma/client';
+
+const adapter = new PrismaPg({
+  connectionString: process.env.DATABASE_URL,
+});
+const prisma = new PrismaClient({ adapter });
+```
 
 Add the following models to your `schema.prisma`:
 
@@ -764,16 +807,16 @@ export class AppModule {}
 
 ## Performance
 
-Measured with PostgreSQL 16, Prisma 6, 500 iterations on Apple Silicon:
+Measured with PostgreSQL 16, Prisma 7.9.1, 500 iterations on Apple Silicon:
 
 | Scenario | Avg | P50 | P95 | P99 |
 |----------|-----|-----|-----|-----|
-| **isEnabled() — cache hit** | **0.04ms** | **0.03ms** | **0.05ms** | **0.07ms** |
-| isEnabled() — cache miss (DB lookup) | 1.30ms | 1.14ms | 2.54ms | 3.69ms |
-| isEnabled() — override cascade (cold) | 1.07ms | 1.02ms | 1.43ms | 2.11ms |
-| **evaluateAll() — 50 flags (mixed)** | **0.19ms** | **0.04ms** | **1.55ms** | **1.71ms** |
+| **isEnabled() — cache hit** | **0.04ms** | **0.04ms** | **0.05ms** | **0.12ms** |
+| isEnabled() — cache miss (DB lookup) | 1.17ms | 1.10ms | 1.62ms | 2.04ms |
+| isEnabled() — override cascade (cold) | 0.95ms | 0.89ms | 1.36ms | 1.87ms |
+| **evaluateAll() — 50 flags (mixed)** | **0.19ms** | **0.04ms** | **1.47ms** | **1.78ms** |
 
-Cache speedup: **32.5x** (hit vs miss). Keep the default 30s cache TTL for optimal performance.
+Cache speedup: **29.2x** (hit vs miss). Keep the default 30s cache TTL for optimal performance.
 
 > Reproduce: `docker compose up -d && dotenv -e .env.test -- npx ts-node benchmarks/evaluation-overhead.ts`
 

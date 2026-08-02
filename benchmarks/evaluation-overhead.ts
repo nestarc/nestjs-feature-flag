@@ -13,10 +13,11 @@
  */
 
 import { Test } from '@nestjs/testing';
+import { MemoryCacheAdapter } from '../src/cache/memory-cache.adapter';
 import { FeatureFlagModule } from '../src/feature-flag.module';
 import { FeatureFlagService } from '../src/services/feature-flag.service';
-import { FlagCacheService } from '../src/services/flag-cache.service';
-import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { PrismaClient } from '../generated/prisma/client';
 
 const DATABASE_URL =
   process.env.DATABASE_URL ??
@@ -76,9 +77,9 @@ function printResult(r: BenchResult) {
 async function main() {
   console.log('=== @nestarc/feature-flag Benchmark ===\n');
 
-  const prisma = new PrismaClient({
-    datasources: { db: { url: DATABASE_URL } },
-  });
+  const adapter = new PrismaPg({ connectionString: DATABASE_URL });
+  const prisma = new PrismaClient({ adapter });
+  const cacheAdapter = new MemoryCacheAdapter();
   await prisma.$connect();
 
   // Create NestJS app with cache enabled (30s TTL)
@@ -88,6 +89,7 @@ async function main() {
         environment: 'production',
         prisma,
         cacheTtlMs: 30_000,
+        cacheAdapter,
       }),
     ],
   }).compile();
@@ -95,7 +97,6 @@ async function main() {
   const appWithCache = moduleWithCache.createNestApplication();
   await appWithCache.init();
   const serviceWithCache = moduleWithCache.get(FeatureFlagService);
-  const cacheService = moduleWithCache.get(FlagCacheService);
 
   // Create NestJS app with cache disabled
   const moduleNoCache = await Test.createTestingModule({
@@ -120,15 +121,15 @@ async function main() {
   // Seed: one flag with overrides
   await serviceNoCache.create({ key: 'BENCH_FLAG', enabled: true });
   await serviceNoCache.setOverride('BENCH_FLAG', {
-    tenantId: 'tenant-1',
+    attributes: { tenantId: 'tenant-1' },
     enabled: false,
   });
   await serviceNoCache.setOverride('BENCH_FLAG', {
-    userId: 'user-1',
+    attributes: { userId: 'user-1' },
     enabled: true,
   });
   await serviceNoCache.setOverride('BENCH_FLAG', {
-    environment: 'staging',
+    attributes: { environment: 'staging' },
     enabled: false,
   });
 
@@ -180,7 +181,7 @@ async function main() {
   console.log(`Running C: isEnabled() with user override (${ITERATIONS} iterations)...`);
   const timingsC: number[] = [];
   for (let i = 0; i < ITERATIONS; i++) {
-    cacheService.invalidate();
+    await cacheAdapter.invalidate();
     const start = performance.now();
     await serviceWithCache.isEnabled('BENCH_FLAG', {
       userId: 'user-1',
@@ -193,10 +194,10 @@ async function main() {
   // ===================================================================
   // Benchmark D: evaluateAll() — bulk (50 flags)
   // ===================================================================
-  cacheService.invalidate();
+  await cacheAdapter.invalidate();
   console.log(`Warming up D (${WARMUP} iterations)...`);
   for (let i = 0; i < WARMUP; i++) {
-    cacheService.invalidate();
+    await cacheAdapter.invalidate();
     await serviceWithCache.evaluateAll();
   }
 
@@ -204,7 +205,7 @@ async function main() {
   const timingsD: number[] = [];
   for (let i = 0; i < ITERATIONS; i++) {
     // Alternate between cache hit and miss to get realistic numbers
-    if (i % 10 === 0) cacheService.invalidate();
+    if (i % 10 === 0) await cacheAdapter.invalidate();
     const start = performance.now();
     await serviceWithCache.evaluateAll();
     timingsD.push(performance.now() - start);

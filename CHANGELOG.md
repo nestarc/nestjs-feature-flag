@@ -2,6 +2,20 @@
 
 All notable changes to `@nestarc/feature-flag` will be documented in this file.
 
+## [0.5.0] — 2026-08-02
+
+### Changed
+- Prisma 7 is now the supported Prisma major (`prisma` and `@prisma/client` 7.9.1 in development)
+- Prisma Client generation now uses the `prisma-client` generator with an explicit output path
+- PostgreSQL tests, benchmarks, and examples now create Prisma Client with `@prisma/adapter-pg`
+- Prisma CLI connection configuration moved from `schema.prisma` to `prisma.config.ts`
+- Node.js 20.19+, 22.12+, or 24+ is now required to match Prisma 7
+
+### Migration
+- Install `@prisma/adapter-pg` and `pg`, then pass a `PrismaPg` adapter to `PrismaClient`
+- Import `PrismaClient` from the generated output path instead of `@prisma/client`
+- Move `DATABASE_URL` into `prisma.config.ts`; no database migration is required
+
 ## [0.4.0] — 2026-06-20
 
 ### Added

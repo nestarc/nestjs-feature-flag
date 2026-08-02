@@ -2,7 +2,7 @@
 
 The `file:../..` dependency is for running this example inside the repository. If you copy it into another project, replace it with the published `@nestarc/feature-flag` version.
 
-This example uses this package's Prisma schema and migrations through `prisma.config.ts`. Set `DATABASE_URL`, run `npx prisma migrate deploy`, and generate the client with `npx prisma generate` before starting the app.
+This example uses this package's Prisma 7 schema and migrations through `prisma.config.ts`. Set `DATABASE_URL`, run `npx prisma migrate deploy`, and generate the client with `npx prisma generate` before starting the app. The generated client is shared at `../../generated/prisma` when the example runs inside this repository.
 
 Create an override with your Admin API or service:
 

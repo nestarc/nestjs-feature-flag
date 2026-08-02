@@ -9,15 +9,18 @@
     "@nestjs/core": "^11.0.0",
     "@nestjs/platform-express": "^11.0.0",
     "@nestarc/feature-flag": "file:../..",
-    "@prisma/client": "^6.0.0",
+    "@prisma/adapter-pg": "^7.9.1",
+    "@prisma/client": "^7.9.1",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
+    "dotenv": "^17.2.3",
+    "pg": "^8.22.0",
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.0"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.0",
-    "prisma": "^6.0.0",
+    "prisma": "^7.9.1",
     "typescript": "^5.5.0"
   }
 }
