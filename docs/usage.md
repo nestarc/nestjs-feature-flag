@@ -2,7 +2,7 @@
 
 This guide is for application developers and AI agents consuming the package. Start with the [README quickstart](../README.md#quickstart) for a complete running app.
 
-**Version scope:** this guide describes **0.6.0 (pending publication)**. It adds `repository` / `tenantContextProvider` module options, invocation `bucketBy`, explicit targeting-key propagation, consistent registry bucketing, Admin null-percentage validation, and full OpenFeature SDK registration. These changes are absent from npm `0.5.0`; use the locally packed 0.6.0 checkout until publication. See the [changelog](../CHANGELOG.md) for version boundaries. When using 0.5.0, inspect its declarations and [tagged source](https://github.com/nestarc/nestjs-feature-flag/tree/v0.5.0).
+**Version scope:** this guide describes **0.6.0**. It adds `repository` / `tenantContextProvider` module options, invocation `bucketBy`, explicit targeting-key propagation, consistent registry bucketing, Admin null-percentage validation, and full OpenFeature SDK registration. These changes are absent from `0.5.0`. See the [changelog](../CHANGELOG.md) for version boundaries. When using 0.5.0, inspect its declarations and [tagged source](https://github.com/nestarc/nestjs-feature-flag/tree/v0.5.0).
 
 ## Contents
 
@@ -27,7 +27,7 @@ This guide is for application developers and AI agents consuming the package. St
 
 Use Node.js `^20.19.0 || ^22.12.0 || >=24.0.0` with NestJS 10/11 and Prisma 7. The default repository needs PostgreSQL and a Prisma client with `featureFlag` and `featureFlagOverride` models. Required package peers are listed in `package.json`; `@prisma/adapter-pg`, `pg`, the Prisma CLI, and `dotenv` below are application setup dependencies.
 
-After 0.6.0 is published, install it in an existing Nest application with matching versions of Prisma CLI, client, and adapter:
+Install 0.6.0 in an existing Nest application with matching versions of Prisma CLI, client, and adapter:
 
 ```bash
 npm install @nestarc/feature-flag@0.6.0
@@ -35,7 +35,7 @@ npm install @prisma/client@^7 @prisma/adapter-pg@^7 pg dotenv class-transformer@
 npm install --save-dev prisma@^7
 ```
 
-Before publication, build this repository with `npm ci` and `npm run build`, run `npm pack`, then install the resulting `nestarc-feature-flag-0.6.0.tgz` in your app with `npm install /path/to/nestarc-feature-flag-0.6.0.tgz`. The [standalone examples](https://github.com/nestarc/nestjs-feature-flag/tree/main/examples) document this path.
+To verify a local checkout, build this repository with `npm ci` and `npm run build`, run `npm pack`, then install the resulting `nestarc-feature-flag-0.6.0.tgz` in your app with `npm install /path/to/nestarc-feature-flag-0.6.0.tgz`. The [standalone examples](https://github.com/nestarc/nestjs-feature-flag/tree/main/examples) document this path.
 
 For a new development database with no existing Prisma migrations:
 
@@ -660,7 +660,7 @@ The SDK's invocation default is forwarded to individual service evaluation. Know
 | Missing flag | `ERROR`, `FLAG_NOT_FOUND`, caller default |
 | Evaluation failure | `ERROR`, `GENERAL`, caller default |
 
-The existing npm 0.5.0 adapter is not the SDK-compatible provider described here. Use the packed 0.6.0 checkout until that version is published. For exposure event controls, use the library's evaluation API or module registry.
+The 0.5.0 adapter does not provide the SDK compatibility described here; upgrade to 0.6.0 for this integration. For exposure event controls, use the library's evaluation API or module registry.
 
 ## Testing
 
@@ -711,7 +711,7 @@ For 0.2 → 0.3, the SQL migration moves legacy `tenant_id`, `user_id`, and `env
 
 ## Agent implementation checklist
 
-1. Inspect the installed `package.json`, changelog, and public `.d.ts` files. Distinguish released 0.5.0 from 0.6.0, which is pending publication and available as a packed checkout.
+1. Inspect the installed `package.json`, changelog, and public `.d.ts` files. Confirm that 0.6.0 is installed before using the options and fixes added in that version.
 2. Use `@nestarc/feature-flag`, `@nestarc/feature-flag/testing`, and `@nestarc/feature-flag/openfeature`. Avoid private `dist/*` or repository `src/*` imports.
 3. Choose the complete basic example or the registration recipe above. Supply database schema/migrations, a generated Prisma client, exported Nest dependencies, environment values, and a seeded flag.
 4. Use top-level user/tenant/environment context, explicit stable bucket identity, and an appropriate missing/error default. Do not treat registry declarations as database creation.

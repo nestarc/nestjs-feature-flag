@@ -7,7 +7,7 @@
 
 `@nestarc/feature-flag` stores feature flags in your PostgreSQL database and evaluates them inside your NestJS application. Use route guards, exact attribute targeting, and deterministic percentage rollouts without a separate feature flag service. NestJS, Prisma, and other [peer dependencies](#installation-and-compatibility) are required.
 
-**Version scope:** these repository docs describe **0.6.0 (pending publication)**. It includes targeting-key and registry fixes, custom module provider options, and an SDK-compatible OpenFeature provider that are absent from npm `0.5.0`. Until 0.6.0 is published, install a package built from this checkout. See the [0.6.0 changes and upgrade notes](CHANGELOG.md), and consult the [0.5.0 source](https://github.com/nestarc/nestjs-feature-flag/tree/v0.5.0) when working on that release.
+**Version scope:** these docs describe **0.6.0**. It includes targeting-key and registry fixes, custom module provider options, and an SDK-compatible OpenFeature provider that are absent from `0.5.0`. See the [0.6.0 changes and upgrade notes](CHANGELOG.md), and consult the [0.5.0 source](https://github.com/nestarc/nestjs-feature-flag/tree/v0.5.0) when working on that release.
 
 ## Contents
 
@@ -23,7 +23,7 @@
 
 ## Installation and compatibility
 
-After 0.6.0 is published, install it in an existing NestJS application:
+Install 0.6.0 in an existing NestJS application:
 
 ```bash
 npm install @nestarc/feature-flag@0.6.0
@@ -31,7 +31,7 @@ npm install @prisma/client@^7 @prisma/adapter-pg@^7 pg class-transformer@^0.5.1 
 npm install --save-dev prisma@^7
 ```
 
-Keep the Prisma CLI, client, and PostgreSQL adapter on matching versions. Before publication, follow the quickstart below to install a locally packed 0.6.0 checkout instead.
+Keep the Prisma CLI, client, and PostgreSQL adapter on matching versions. The quickstart below uses a locally packed archive to verify this repository checkout.
 
 | Requirement | Supported range / purpose |
 | --- | --- |
@@ -63,7 +63,7 @@ npm run seed -- on
 npm start
 ```
 
-The tarball contains the local 0.6.0 checkout and is available before npm publication. The database URL above is for the repository's development Compose service; substitute your own empty development database if needed. In another terminal:
+The tarball contains the local checkout, including any local changes. The database URL above is for the repository's development Compose service; substitute your own empty development database if needed. In another terminal:
 
 ```bash
 curl -i http://127.0.0.1:3000/dashboard
@@ -222,7 +222,7 @@ The default cache is in memory with a 30,000 ms TTL. Set `cacheTtlMs: 0` to disa
 
 ## For AI agents
 
-Check the installed package version and its `.d.ts` exports first, then use [docs/usage.md](docs/usage.md) for consumer implementation. It identifies the 0.6.0 APIs, publication status, prerequisites, context/default semantics, and executable examples. The guide and changelog are included in the package so installed-package workflows can read them without relying on search results. Use the documented `/testing` and `/openfeature` entry points instead of importing internal `dist` paths.
+Check the installed package version and its `.d.ts` exports first, then use [docs/usage.md](docs/usage.md) for consumer implementation. It identifies the 0.6.0 APIs, version boundaries, prerequisites, context/default semantics, and executable examples. The guide and changelog are included in the package so installed-package workflows can read them without relying on search results. Use the documented `/testing` and `/openfeature` entry points instead of importing internal `dist` paths.
 
 For changes to this repository, follow [AGENTS.md](https://github.com/nestarc/nestjs-feature-flag/blob/main/AGENTS.md). Historical design documents are not the current API contract.
 

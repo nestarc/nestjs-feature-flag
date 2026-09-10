@@ -2,9 +2,9 @@
 
 All notable changes to `@nestarc/feature-flag` will be documented in this file.
 
-## [0.6.0] — Unreleased
+## [0.6.0] — 2026-09-10
 
-Version 0.6.0 is prepared in this checkout and is pending npm publication. These changes are not included in the published 0.5.0. Use a locally built 0.6.0 package tarball until publication.
+Version 0.6.0 adds module provider options and corrects evaluation and SDK integration behavior from 0.5.0.
 
 ### Added
 - Accept custom `repository` and `tenantContextProvider` instances in synchronous and asynchronous module registration; Prisma is required only when no repository is supplied.

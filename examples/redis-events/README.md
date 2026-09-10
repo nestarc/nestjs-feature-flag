@@ -76,7 +76,7 @@ Each process logs evaluated events. The updated event appears only in the proces
 
 The default Redis namespace is `feature-flag-example:` and the channel is `feature-flag-example:invalidate`. To isolate runs, set identical `EXAMPLE_REDIS_PREFIX` and `EXAMPLE_REDIS_CHANNEL` in both processes. `EXAMPLE_FLAG_KEY` optionally changes the fixture key; by default it is `EXAMPLE_REDIS`.
 
-After 0.6.0 is published, copy this directory anywhere and run `npm install` to use the declared package version. Until publication, install the packed 0.6.0 archive above. Prisma schema, migrations, and generated client paths are local. Run `db:migrate` to preserve the copied migrations' JSONB uniqueness and non-empty attributes constraints. `npm run build` compiles the app and generated client; no Nest CLI is required.
+Copy this directory anywhere and run `npm install` to use the declared package version. To verify local library changes, install the packed archive above. Prisma schema, migrations, and generated client paths are local. Run `db:migrate` to preserve the copied migrations' JSONB uniqueness and non-empty attributes constraints. `npm run build` compiles the app and generated client; no Nest CLI is required.
 
 Stop both processes before `npm run seed -- cleanup`, which removes only the example flag and its overrides. Its cached value expires within the 60-second TTL. Stop the repository test services with `npm run docker:down` from the repository root when finished.
 

@@ -9,7 +9,7 @@
 - [Repository instructions](../AGENTS.md): maintenance and verification commands.
 - [Documentation remediation checklist](2026-09-10-documentation-remediation.md): fixed scope and evidence for this documentation/implementation update.
 
-The current checkout is version `0.6.0`, pending publication. Use its locally packed archive until publication, and read the version scope in the README and consumer guide before applying 0.6.0 options to an installed 0.5.0 release.
+The current consumer documentation covers version `0.6.0`. Read the version scope in the README and consumer guide before applying 0.6.0 options to an installed 0.5.0 release. Use a locally packed archive when verifying changes to this checkout.
 
 ## Historical records
 

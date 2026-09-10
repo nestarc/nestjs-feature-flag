@@ -46,7 +46,7 @@ Caching is disabled here so repeat seeding is immediately visible. `npm run seed
 
 ## Standalone files and verification
 
-After 0.6.0 is published, copy this entire directory elsewhere and run `npm install` to consume the declared package version, then continue from the database environment command. Until publication, install the packed 0.6.0 archive as above. Local Prisma configuration reads `prisma/schema.prisma` and `prisma/migrations`; the generated client lives inside `src/generated/prisma` and is included in `npm run build`. No root repository imports or Nest CLI are needed.
+Copy this entire directory elsewhere and run `npm install` to consume the declared package version, then continue from the database environment command. To verify local library changes, install the packed archive as above. Local Prisma configuration reads `prisma/schema.prisma` and `prisma/migrations`; the generated client lives inside `src/generated/prisma` and is included in `npm run build`. No root repository imports or Nest CLI are needed.
 
 The copied migrations include database constraints not represented completely by the Prisma schema. Run `db:migrate` instead of substituting `prisma db push`.
 
