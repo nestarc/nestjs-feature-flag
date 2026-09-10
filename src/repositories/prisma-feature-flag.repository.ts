@@ -24,15 +24,19 @@ function isPrismaError(error: unknown, code: string): boolean {
   );
 }
 
+function assertValidPercentage(percentage: number): void {
+  if (!Number.isInteger(percentage) || percentage < 0 || percentage > 100) {
+    throw new BadRequestException('percentage must be an integer between 0 and 100');
+  }
+}
+
 @Injectable()
 export class PrismaFeatureFlagRepository implements FeatureFlagRepository {
   constructor(private readonly prisma: any) {}
 
   async createFlag(input: CreateFeatureFlagInput): Promise<FeatureFlagWithOverrides> {
-    const percentage = input.percentage ?? 0;
-    if (percentage < 0 || percentage > 100) {
-      throw new BadRequestException(`percentage must be between 0 and 100, got ${percentage}`);
-    }
+    const percentage = input.percentage === undefined ? 0 : input.percentage;
+    assertValidPercentage(percentage);
 
     try {
       return await this.prisma.featureFlag.create({
@@ -54,8 +58,8 @@ export class PrismaFeatureFlagRepository implements FeatureFlagRepository {
   }
 
   async updateFlag(key: string, input: UpdateFeatureFlagInput): Promise<FeatureFlagWithOverrides> {
-    if (input.percentage !== undefined && (input.percentage < 0 || input.percentage > 100)) {
-      throw new BadRequestException(`percentage must be between 0 and 100, got ${input.percentage}`);
+    if (input.percentage !== undefined) {
+      assertValidPercentage(input.percentage);
     }
 
     try {

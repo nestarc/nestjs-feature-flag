@@ -1,0 +1,40 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model FeatureFlag {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  key         String    @unique
+  description String?
+  enabled     Boolean   @default(false)
+  percentage  Int       @default(0)
+  metadata    Json      @default("{}")
+  archivedAt  DateTime? @map("archived_at") @db.Timestamptz()
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+
+  overrides FeatureFlagOverride[]
+
+  @@map("feature_flags")
+}
+
+model FeatureFlagOverride {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  flagId     String   @map("flag_id") @db.Uuid
+  attributes Json
+  priority   Int      @default(0)
+  enabled    Boolean
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  flag FeatureFlag @relation(fields: [flagId], references: [id], onDelete: Cascade)
+
+  @@index([flagId], map: "idx_override_flag_id")
+  @@map("feature_flag_overrides")
+}

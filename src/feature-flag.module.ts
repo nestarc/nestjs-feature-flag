@@ -28,9 +28,12 @@ import { FlagContextResolver } from './services/flag-context-resolver';
 import { FlagEventPublisher } from './services/flag-event-publisher';
 import { FeatureFlagGuard } from './guards/feature-flag.guard';
 import { FlagContextMiddleware } from './middleware/flag-context.middleware';
+import { FeatureFlagRepository } from './interfaces/feature-flag-repository.interface';
+import { TenantContextProvider } from './interfaces/tenant-context-provider.interface';
 
 export interface FeatureFlagModuleRootOptions extends FeatureFlagModuleOptions {
-  prisma: any;
+  /** Prisma client used by the default repository. Required unless repository is provided. */
+  prisma?: any;
 }
 
 export interface FeatureFlagModuleRootAsyncOptions extends FeatureFlagModuleAsyncOptions {
@@ -53,13 +56,12 @@ const coreProviders: Provider[] = [
 @Module({})
 export class FeatureFlagModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
-    consumer
-      .apply(FlagContextMiddleware)
-      .forRoutes({ path: '(.*)', method: RequestMethod.ALL });
+    consumer.apply(FlagContextMiddleware).forRoutes({ path: '(.*)', method: RequestMethod.ALL });
   }
 
   static forRoot(options: FeatureFlagModuleRootOptions): DynamicModule {
     const { prisma, ...moduleOptions } = options;
+    const repository = this.createRepository(prisma, options.repository);
 
     let eventProvider: Provider = { provide: 'EVENT_EMITTER', useValue: null };
     if (options.emitEvents) {
@@ -83,12 +85,14 @@ export class FeatureFlagModule implements NestModule {
         },
         {
           provide: FEATURE_FLAG_REPOSITORY,
-          useValue: new PrismaFeatureFlagRepository(prisma),
+          useValue: repository,
         },
-        {
-          provide: TENANT_CONTEXT_PROVIDER,
-          useClass: DefaultTenantContextProvider,
-        },
+        options.tenantContextProvider
+          ? {
+              provide: TENANT_CONTEXT_PROVIDER,
+              useValue: this.createTenantDelegate(options.tenantContextProvider),
+            }
+          : { provide: TENANT_CONTEXT_PROVIDER, useClass: DefaultTenantContextProvider },
         ...coreProviders,
       ],
       exports: [
@@ -139,12 +143,16 @@ export class FeatureFlagModule implements NestModule {
         {
           provide: FEATURE_FLAG_REPOSITORY,
           useFactory: (full: FeatureFlagModuleRootOptions) =>
-            new PrismaFeatureFlagRepository(full.prisma),
+            this.createRepository(full.prisma, full.repository),
           inject: [FULL_OPTIONS],
         },
         {
           provide: TENANT_CONTEXT_PROVIDER,
-          useClass: DefaultTenantContextProvider,
+          useFactory: (full: FeatureFlagModuleRootOptions, moduleRef: ModuleRef) =>
+            full.tenantContextProvider
+              ? this.createTenantDelegate(full.tenantContextProvider)
+              : new DefaultTenantContextProvider(moduleRef),
+          inject: [FULL_OPTIONS, ModuleRef],
         },
         ...coreProviders,
       ],
@@ -159,9 +167,34 @@ export class FeatureFlagModule implements NestModule {
     };
   }
 
-  private static createAsyncProviders(
-    options: FeatureFlagModuleRootAsyncOptions,
-  ): Provider[] {
+  private static createRepository(
+    prisma: any,
+    repository?: FeatureFlagRepository,
+  ): FeatureFlagRepository {
+    if (repository) {
+      // Delegate only the storage port: the caller owns the supplied instance's lifecycle.
+      return {
+        createFlag: repository.createFlag.bind(repository),
+        updateFlag: repository.updateFlag.bind(repository),
+        archiveFlag: repository.archiveFlag.bind(repository),
+        findFlagByKey: repository.findFlagByKey.bind(repository),
+        findFlagIdByKey: repository.findFlagIdByKey.bind(repository),
+        findAllActiveFlags: repository.findAllActiveFlags.bind(repository),
+        findOverride: repository.findOverride.bind(repository),
+        createOverride: repository.createOverride.bind(repository),
+        updateOverride: repository.updateOverride.bind(repository),
+        deleteOverride: repository.deleteOverride.bind(repository),
+      };
+    }
+    if (prisma) return new PrismaFeatureFlagRepository(prisma);
+    throw new Error('FeatureFlagModule requires either a prisma client or a custom repository.');
+  }
+
+  private static createTenantDelegate(provider: TenantContextProvider): TenantContextProvider {
+    return { getCurrentTenantId: provider.getCurrentTenantId.bind(provider) };
+  }
+
+  private static createAsyncProviders(options: FeatureFlagModuleRootAsyncOptions): Provider[] {
     if (options.useFactory) {
       return [
         {

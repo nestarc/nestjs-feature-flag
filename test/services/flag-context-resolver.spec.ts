@@ -91,6 +91,24 @@ describe('FlagContextResolver', () => {
 
       expect(result.environment).toBe('production');
     });
+
+    it('should suppress the module environment when explicitly null', () => {
+      const result = resolver.resolve({ environment: null });
+
+      expect(result.environment).toBeNull();
+      expect(result.attributes?.environment).toBeNull();
+    });
+  });
+
+  describe('targetingKey resolution', () => {
+    it.each(['anonymous-session-1', null, ''])(
+      'should preserve the explicit targetingKey %p',
+      (targetingKey) => {
+        const result = resolver.resolve({ targetingKey });
+
+        expect(result.targetingKey).toBe(targetingKey);
+      },
+    );
   });
 
   describe('attribute normalization', () => {

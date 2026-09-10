@@ -44,12 +44,31 @@ describe('flag registry helpers', () => {
     expect(service.isEnabled).toHaveBeenCalledWith(
       'NEW_CHECKOUT',
       { tenantId: 'tenant-1' },
-      { defaultValue: false, trackExposure: true },
+      { defaultValue: false, bucketBy: 'tenantId', trackExposure: true },
     );
     expect(service.evaluateBoolean).toHaveBeenCalledWith(
       'NEW_CHECKOUT',
       { tenantId: 'tenant-1' },
-      { defaultValue: false, trackExposure: true },
+      { defaultValue: false, bucketBy: 'tenantId', trackExposure: true },
+    );
+  });
+
+  it('should let invocation options override registry options', async () => {
+    const service = {
+      evaluateBoolean: jest.fn().mockResolvedValue({ value: true }),
+    } as unknown as FeatureFlagService;
+    const client = createFeatureFlagClient(service, flags);
+
+    await client.evaluateBoolean('NEW_CHECKOUT', { userId: 'user-1' }, {
+      defaultValue: true,
+      bucketBy: 'userId',
+      trackExposure: false,
+    });
+
+    expect(service.evaluateBoolean).toHaveBeenCalledWith(
+      'NEW_CHECKOUT',
+      { userId: 'user-1' },
+      { defaultValue: true, bucketBy: 'userId', trackExposure: false },
     );
   });
 

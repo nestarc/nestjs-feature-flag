@@ -67,7 +67,7 @@ export class FeatureFlagService {
       const details = flag
         ? {
             ...this.evaluator.evaluate(flag, context, {
-              bucketBy: registryDefinition?.bucketBy,
+              bucketBy: evaluationOptions.bucketBy ?? registryDefinition?.bucketBy,
             }),
             evaluationTimeMs: Date.now() - startTime,
           }
@@ -101,7 +101,9 @@ export class FeatureFlagService {
     const result: Record<string, boolean> = {};
 
     for (const flag of flags) {
-      result[flag.key] = this.evaluator.evaluate(flag, context).result;
+      result[flag.key] = this.evaluator.evaluate(flag, context, {
+        bucketBy: this.options.flags?.[flag.key]?.bucketBy,
+      }).result;
     }
 
     return result;

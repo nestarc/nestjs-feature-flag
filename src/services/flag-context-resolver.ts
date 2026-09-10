@@ -27,6 +27,7 @@ export class FlagContextResolver {
       userId,
       tenantId,
       environment,
+      ...(explicit?.targetingKey !== undefined && { targetingKey: explicit.targetingKey }),
       attributes: {
         ...(explicit?.attributes ?? {}),
         ...(userId !== undefined && { userId }),

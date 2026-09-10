@@ -1,6 +1,10 @@
 # Nestjs specific
 /dist
 /node_modules
+**/node_modules/
+examples/*/dist/
+examples/*/src/generated/
+examples/*/.env
 /build
 /tmp
 /generated/prisma

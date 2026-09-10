@@ -24,9 +24,19 @@ jobs:
           --health-interval 3s
           --health-timeout 5s
           --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 3s
+          --health-timeout 5s
+          --health-retries 10
 
     env:
       DATABASE_URL: postgresql://test:test@localhost:5432/feature_flag_test?schema=public
+      REDIS_URL: redis://localhost:6379
 
     steps:
       - uses: actions/checkout@v6
@@ -58,3 +68,9 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Verify documentation sources, links, and package contents
+        run: npm run verify:docs
+
+      - name: Verify standalone packed-package examples and real Redis instances
+        run: npm run verify:examples

@@ -2,12 +2,14 @@ import { NotFoundException } from '@nestjs/common';
 import { FeatureFlagService } from '../../src/services/feature-flag.service';
 import { FlagEvaluatorService } from '../../src/services/flag-evaluator.service';
 import { FlagContextResolver } from '../../src/services/flag-context-resolver';
+import { FlagContext } from '../../src/services/flag-context';
 import { FlagEventPublisher } from '../../src/services/flag-event-publisher';
 import { FeatureFlagModuleOptions } from '../../src/interfaces/feature-flag-options.interface';
 import { FeatureFlagWithOverrides } from '../../src/interfaces/feature-flag.interface';
 import { FeatureFlagRepository } from '../../src/interfaces/feature-flag-repository.interface';
 import { CacheAdapter } from '../../src/interfaces/cache-adapter.interface';
 import { FeatureFlagEvents } from '../../src/events/feature-flag.events';
+import { createFeatureFlagClient, defineFlags } from '../../src/flag-registry';
 
 function makeFlagRecord(key: string, overrides: Partial<FeatureFlagWithOverrides> = {}): FeatureFlagWithOverrides {
   return {
@@ -365,6 +367,175 @@ describe('FeatureFlagService', () => {
       const result = await service.evaluateAll();
       expect(result).toEqual({ FLAG_A: true });
       expect(mockRepository.findAllActiveFlags).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('percentage bucketing through the resolved context', () => {
+    beforeEach(() => {
+      const contextResolver = new FlagContextResolver(options, new FlagContext(), {
+        getCurrentTenantId: () => null,
+      });
+      service = new FeatureFlagService(
+        options,
+        mockRepository,
+        mockCacheAdapter,
+        evaluator,
+        contextResolver,
+        mockEventPublisher as unknown as FlagEventPublisher,
+      );
+    });
+
+    it('should evaluate an anonymous targeting key and preserve it in the evaluation event', async () => {
+      mockRepository.findFlagByKey.mockResolvedValue(
+        makeFlagRecord('ROLLOUT', { percentage: 50 }),
+      );
+
+      const details = await service.evaluateBoolean('ROLLOUT', {
+        targetingKey: 'anonymous-session-1',
+      });
+
+      expect(details).toEqual(expect.objectContaining({
+        value: true,
+        source: 'percentage',
+        reason: 'PERCENTAGE_MATCH',
+        targetingKey: 'anonymous-session-1',
+      }));
+      expect(mockEventPublisher.emit).toHaveBeenCalledWith(
+        FeatureFlagEvents.EVALUATED,
+        expect.objectContaining({
+          context: expect.objectContaining({ targetingKey: 'anonymous-session-1' }),
+        }),
+      );
+    });
+
+    it.each([
+      {
+        name: 'explicit targeting key before invocation options',
+        targetingKey: 'anonymous-session-1',
+        invocationBucketBy: 'accountId',
+        registryBucketBy: 'environment',
+        metadataBucketBy: 'tenantId',
+        expectedKey: 'anonymous-session-1',
+        expectedValue: true,
+      },
+      {
+        name: 'invocation bucketBy before the module registry',
+        targetingKey: undefined,
+        invocationBucketBy: 'accountId',
+        registryBucketBy: 'environment',
+        metadataBucketBy: 'tenantId',
+        expectedKey: 'org-1',
+        expectedValue: false,
+      },
+      {
+        name: 'module registry bucketBy before metadata',
+        targetingKey: undefined,
+        invocationBucketBy: undefined,
+        registryBucketBy: 'environment',
+        metadataBucketBy: 'tenantId',
+        expectedKey: 'production',
+        expectedValue: true,
+      },
+      {
+        name: 'metadata bucketBy before the legacy user ID',
+        targetingKey: undefined,
+        invocationBucketBy: undefined,
+        registryBucketBy: undefined,
+        metadataBucketBy: 'tenantId',
+        expectedKey: 'tenant-1',
+        expectedValue: false,
+      },
+      {
+        name: 'legacy user ID when no bucketBy is configured',
+        targetingKey: undefined,
+        invocationBucketBy: undefined,
+        registryBucketBy: undefined,
+        metadataBucketBy: undefined,
+        expectedKey: 'user-1',
+        expectedValue: true,
+      },
+    ])('should use $name', async ({
+      targetingKey,
+      invocationBucketBy,
+      registryBucketBy,
+      metadataBucketBy,
+      expectedKey,
+      expectedValue,
+    }) => {
+      options.flags = {
+        ROLLOUT: { defaultValue: false, bucketBy: registryBucketBy },
+      };
+      mockRepository.findFlagByKey.mockResolvedValue(makeFlagRecord('ROLLOUT', {
+        percentage: 50,
+        metadata: { bucketBy: metadataBucketBy },
+      }));
+
+      const details = await service.evaluateBoolean('ROLLOUT', {
+        userId: 'user-1',
+        tenantId: 'tenant-1',
+        environment: 'production',
+        targetingKey,
+        attributes: { accountId: 'org-1' },
+      }, { bucketBy: invocationBucketBy });
+
+      expect(details.targetingKey).toBe(expectedKey);
+      expect(details.value).toBe(expectedValue);
+    });
+
+    it.each([false, true])(
+      'should agree between single and bulk evaluation with module registry bucketing (cached: %p)',
+      async (cached) => {
+        options.flags = { ROLLOUT: { defaultValue: false, bucketBy: 'tenantId' } };
+        const flag = makeFlagRecord('ROLLOUT', {
+          percentage: 50,
+          metadata: { bucketBy: 'userId' },
+        });
+        mockRepository.findFlagByKey.mockResolvedValue(flag);
+        if (cached) {
+          mockCacheAdapter.getAll.mockResolvedValue([flag]);
+        } else {
+          mockRepository.findAllActiveFlags.mockResolvedValue([flag]);
+        }
+        const context = { userId: 'user-1', tenantId: 'tenant-1' };
+
+        const single = await service.evaluateBoolean('ROLLOUT', context);
+        mockEventPublisher.emit.mockClear();
+        const all = await service.evaluateAll(context);
+
+        expect(single.targetingKey).toBe('tenant-1');
+        expect(single.value).toBe(false);
+        expect(all).toEqual({ ROLLOUT: single.value });
+        expect(mockEventPublisher.emit).not.toHaveBeenCalled();
+      },
+    );
+
+    it('should apply the typed client registry without a module registry and allow explicit overrides', async () => {
+      const client = createFeatureFlagClient(service, defineFlags({
+        ROLLOUT: { defaultValue: false, bucketBy: 'tenantId' },
+      }));
+      mockRepository.findFlagByKey.mockResolvedValue(makeFlagRecord('ROLLOUT', {
+        percentage: 50,
+        metadata: { bucketBy: 'userId' },
+      }));
+      const context = { userId: 'user-1', tenantId: 'tenant-1' };
+
+      expect(await client.isEnabled('ROLLOUT', context)).toBe(false);
+      const registryDetails = await client.evaluateBoolean('ROLLOUT', context);
+      expect(registryDetails.targetingKey).toBe('tenant-1');
+      expect(registryDetails.value).toBe(false);
+
+      const invocationDetails = await client.evaluateBoolean('ROLLOUT', context, {
+        bucketBy: 'userId',
+      });
+      expect(invocationDetails.targetingKey).toBe('user-1');
+      expect(invocationDetails.value).toBe(true);
+
+      const explicitDetails = await client.evaluateBoolean('ROLLOUT', {
+        ...context,
+        targetingKey: 'anonymous-session-1',
+      }, { bucketBy: 'tenantId' });
+      expect(explicitDetails.targetingKey).toBe('anonymous-session-1');
+      expect(explicitDetails.value).toBe(true);
     });
   });
 

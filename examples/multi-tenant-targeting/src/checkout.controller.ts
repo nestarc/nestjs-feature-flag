@@ -1,4 +1,5 @@
 import { Controller, Get, Headers } from '@nestjs/common';
+import { FLAG_KEY } from './flag-key';
 import { FeatureFlagService } from '@nestarc/feature-flag';
 
 @Controller('checkout')
@@ -12,7 +13,7 @@ export class CheckoutController {
     @Headers('x-country') country: string,
     @Headers('x-plan') plan: string,
   ) {
-    const enabled = await this.flags.isEnabled('NEW_CHECKOUT', {
+    const enabled = await this.flags.isEnabled(FLAG_KEY, {
       userId,
       tenantId,
       attributes: {

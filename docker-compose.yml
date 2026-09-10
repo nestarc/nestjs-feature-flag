@@ -2,7 +2,7 @@ services:
   postgres:
     image: postgres:16-alpine
     ports:
-      - '5499:5432'
+      - '127.0.0.1:${FEATURE_FLAG_POSTGRES_PORT:-5499}:5432'
     environment:
       POSTGRES_DB: feature_flag_test
       POSTGRES_USER: test
@@ -11,6 +11,17 @@ services:
       - /var/lib/postgresql/data
     healthcheck:
       test: ['CMD', 'pg_isready', '-U', 'test', '-d', 'feature_flag_test']
+      interval: 2s
+      timeout: 5s
+      retries: 10
+  redis:
+    image: redis:7-alpine
+    ports:
+      - '127.0.0.1:${FEATURE_FLAG_REDIS_PORT:-6399}:6379'
+    tmpfs:
+      - /data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
       interval: 2s
       timeout: 5s
       retries: 10

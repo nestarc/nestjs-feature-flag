@@ -33,6 +33,12 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Verify package contracts and consumer documentation
+        run: |
+          npm test -- --runInBand
+          npm run verify:docs
+          npm run verify:examples -- --build-only
+
       - name: Publish to npm
         run: npm publish --access public
 

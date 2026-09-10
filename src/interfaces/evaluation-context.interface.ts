@@ -1,16 +1,16 @@
 import { TargetingAttributes } from './feature-flag.interface';
 
 export interface EvaluationContext {
-  /** User ID - used for user-scoped targeting and percentage hash */
+  /** User ID for targeting and percentage bucketing. Null suppresses the ambient user ID. */
   userId?: string | null;
 
-  /** Tenant ID - used for tenant-scoped targeting. Ignored if tenancy is not installed */
+  /** Tenant ID for targeting and percentage bucketing, including without a tenancy package. Null suppresses the ambient tenant ID. */
   tenantId?: string | null;
 
-  /** Environment - auto-injected from module options. Can be explicitly overridden */
-  environment?: string;
+  /** Environment defaults to module options. An explicit value or null overrides that default. */
+  environment?: string | null;
 
-  /** Explicit stable key for percentage rollout bucketing */
+  /** Non-empty stable key for percentage bucketing; takes precedence over bucketBy. Null or an empty string allows normal fallback. */
   targetingKey?: string | null;
 
   /** Additional exact-match targeting attributes */

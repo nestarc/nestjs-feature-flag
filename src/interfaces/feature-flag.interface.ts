@@ -3,14 +3,14 @@ export type TargetingAttributes = Record<string, TargetingAttributeValue>;
 
 export interface CreateFeatureFlagInput {
   key: string;
-  description?: string;
+  description?: string | null;
   enabled?: boolean;
   percentage?: number;
   metadata?: Record<string, unknown>;
 }
 
 export interface UpdateFeatureFlagInput {
-  description?: string;
+  description?: string | null;
   enabled?: boolean;
   percentage?: number;
   metadata?: Record<string, unknown>;

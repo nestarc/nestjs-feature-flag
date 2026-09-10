@@ -21,6 +21,9 @@ export interface EvaluateBooleanOptions {
   /** Invocation-level default used when the flag is missing or evaluation fails. */
   defaultValue?: boolean;
 
+  /** Percentage bucket attribute, overriding registry and flag metadata. A non-empty context.targetingKey takes precedence. */
+  bucketBy?: BucketBy;
+
   /** Emit an exposure event for this evaluation. */
   trackExposure?: boolean;
 

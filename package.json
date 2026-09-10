@@ -1,7 +1,11 @@
 {
   "name": "@nestarc/feature-flag",
   "version": "0.5.0",
-  "description": "DB-backed feature flags for NestJS + Prisma + PostgreSQL with tenant-aware overrides",
+  "description": "NestJS feature flags with Prisma and PostgreSQL: attribute targeting, percentage rollouts, and optional Redis caching. No external flag service required.",
+  "homepage": "https://nestarc.dev/packages/feature-flag/",
+  "bugs": {
+    "url": "https://github.com/nestarc/nestjs-feature-flag/issues"
+  },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
@@ -20,14 +24,18 @@
   },
   "files": [
     "dist",
-    "prisma"
+    "prisma",
+    "docs/usage*.md",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "test": "jest",
     "test:cov": "jest --coverage",
+    "verify:docs": "node scripts/verify-docs.mjs",
+    "verify:examples": "node scripts/verify-examples.mjs",
     "prebench": "npm run prisma:generate",
-    "bench": "dotenv -e .env.test -- npx ts-node benchmarks/evaluation-overhead.ts",
+    "bench": "dotenv -e .env.test -- ts-node benchmarks/evaluation-overhead.ts",
     "lint": "eslint 'src/**/*.ts' 'test/**/*.ts'",
     "format": "prettier --write 'src/**/*.ts' 'test/**/*.ts'",
     "prisma:generate": "prisma generate",
@@ -49,6 +57,9 @@
     "feature-toggle",
     "rollout",
     "percentage-rollout",
+    "attribute-targeting",
+    "redis",
+    "openfeature",
     "prisma",
     "postgresql",
     "multi-tenant",
@@ -63,7 +74,7 @@
   "peerDependencies": {
     "@nestjs/common": "^10.0.0 || ^11.0.0",
     "@nestjs/core": "^10.0.0 || ^11.0.0",
-    "@openfeature/server-sdk": "^1.0.0",
+    "@openfeature/server-sdk": "^1.23.0",
     "@prisma/client": "^7.0.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.0 || ^0.15.0",
@@ -96,11 +107,13 @@
     "@nestjs/event-emitter": "^3.0.0",
     "@nestjs/platform-express": "^11.0.0",
     "@nestjs/testing": "^11.0.0",
+    "@openfeature/server-sdk": "^1.23.0",
     "@prisma/adapter-pg": "^7.9.1",
     "@prisma/client": "^7.9.1",
     "@types/express": "^5.0.0",
     "@types/ioredis-mock": "^8.2.7",
     "@types/jest": "^29.5.0",
+    "@types/pg": "^8.23.1",
     "@types/supertest": "^7.2.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",

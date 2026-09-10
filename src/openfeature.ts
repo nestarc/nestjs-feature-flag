@@ -1,10 +1,16 @@
-import { EvaluationContext } from './interfaces/evaluation-context.interface';
+import type {
+  ErrorCode,
+  FlagMetadata,
+  Provider,
+  ResolutionDetails,
+} from '@openfeature/server-sdk';
+import type { EvaluationContext } from './interfaces/evaluation-context.interface';
 import {
   BooleanEvaluationDetails,
   EvaluationReason,
 } from './interfaces/evaluation-details.interface';
 import { TargetingAttributes } from './interfaces/feature-flag.interface';
-import { FeatureFlagService } from './services/feature-flag.service';
+import type { FeatureFlagService } from './services/feature-flag.service';
 import { isTargetingAttributeValue } from './utils/targeting-attributes';
 
 export interface OpenFeatureBooleanProviderOptions {
@@ -19,16 +25,12 @@ export interface OpenFeatureEvaluationContext {
   [key: string]: unknown;
 }
 
-export interface OpenFeatureBooleanResolutionDetails {
-  value: boolean;
+export interface OpenFeatureBooleanResolutionDetails extends ResolutionDetails<boolean> {
   reason: string;
-  variant?: string;
-  errorCode?: string;
-  errorMessage?: string;
-  flagMetadata: Record<string, unknown>;
+  flagMetadata: FlagMetadata;
 }
 
-export interface OpenFeatureBooleanProvider {
+export interface OpenFeatureBooleanProvider extends Provider {
   metadata: { name: string };
   resolveBooleanEvaluation(
     flagKey: string,
@@ -38,10 +40,11 @@ export interface OpenFeatureBooleanProvider {
 }
 
 export function createOpenFeatureBooleanProvider(
-  service: FeatureFlagService,
+  service: Pick<FeatureFlagService, 'evaluateBoolean'>,
   options: OpenFeatureBooleanProviderOptions = {},
 ): OpenFeatureBooleanProvider {
   return {
+    runsOn: 'server',
     metadata: {
       name: options.name ?? '@nestarc/feature-flag',
     },
@@ -57,16 +60,41 @@ export function createOpenFeatureBooleanProvider(
         return {
           value: defaultValue,
           reason: 'ERROR',
-          errorCode: error instanceof Error ? error.constructor.name : 'Error',
+          errorCode: errorCodes.GENERAL,
           errorMessage: error instanceof Error ? error.message : String(error),
           flagMetadata: {
             source: 'default',
             localReason: 'ERROR',
             defaultUsed: true,
+            localErrorCode: error instanceof Error ? error.constructor.name : 'Error',
           },
         };
       }
     },
+    resolveStringEvaluation: async (_flagKey, defaultValue) =>
+      unsupportedType(defaultValue),
+    resolveNumberEvaluation: async (_flagKey, defaultValue) =>
+      unsupportedType(defaultValue),
+    resolveObjectEvaluation: async (_flagKey, defaultValue) =>
+      unsupportedType(defaultValue),
+  };
+}
+
+// Keep the SDK optional at runtime. Its string enum values are verified by the
+// SDK integration tests; importing the enum as a value would load the SDK.
+const errorCodes = {
+  GENERAL: 'GENERAL' as ErrorCode.GENERAL,
+  FLAG_NOT_FOUND: 'FLAG_NOT_FOUND' as ErrorCode.FLAG_NOT_FOUND,
+  TYPE_MISMATCH: 'TYPE_MISMATCH' as ErrorCode.TYPE_MISMATCH,
+};
+
+function unsupportedType<T>(defaultValue: T): ResolutionDetails<T> {
+  return {
+    value: defaultValue,
+    reason: 'ERROR',
+    errorCode: errorCodes.TYPE_MISMATCH,
+    errorMessage: '@nestarc/feature-flag supports boolean flags only',
+    flagMetadata: { source: 'default', defaultUsed: true },
   };
 }
 
@@ -87,7 +115,7 @@ function toEvaluationContext(context: OpenFeatureEvaluationContext): EvaluationC
     targetingKey: readString(context.targetingKey),
     userId: readString(context.userId),
     tenantId: readString(context.tenantId),
-    environment: readString(context.environment) ?? undefined,
+    environment: readString(context.environment),
     attributes,
   };
 }
@@ -98,16 +126,26 @@ function toOpenFeatureResolution(
   return {
     value: details.value,
     reason: mapOpenFeatureReason(details.reason),
-    errorCode: details.errorCode,
+    errorCode:
+      details.reason === 'FLAG_NOT_FOUND'
+        ? errorCodes.FLAG_NOT_FOUND
+        : details.reason === 'ERROR'
+          ? errorCodes.GENERAL
+          : undefined,
     errorMessage: details.errorMessage,
     flagMetadata: {
       source: details.source,
       localReason: details.reason,
       defaultUsed: details.defaultUsed,
-      matchedOverrideId: details.matchedOverrideId,
-      bucket: details.bucket,
-      targetingKey: details.targetingKey,
-      evaluationTimeMs: details.evaluationTimeMs,
+      ...(details.matchedOverrideId !== undefined && {
+        matchedOverrideId: details.matchedOverrideId,
+      }),
+      ...(details.bucket !== undefined && { bucket: details.bucket }),
+      ...(details.targetingKey !== undefined && { targetingKey: details.targetingKey }),
+      ...(details.evaluationTimeMs !== undefined && {
+        evaluationTimeMs: details.evaluationTimeMs,
+      }),
+      ...(details.errorCode !== undefined && { localErrorCode: details.errorCode }),
     },
   };
 }
@@ -119,9 +157,9 @@ function mapOpenFeatureReason(reason: EvaluationReason): string {
     case 'PERCENTAGE_MATCH':
     case 'PERCENTAGE_MISS':
       return 'SPLIT';
-    case 'FLAG_NOT_FOUND':
     case 'PERCENTAGE_NO_TARGETING_KEY':
       return 'DEFAULT';
+    case 'FLAG_NOT_FOUND':
     case 'ERROR':
       return 'ERROR';
     case 'ARCHIVED':

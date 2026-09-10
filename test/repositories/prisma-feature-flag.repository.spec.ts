@@ -81,12 +81,21 @@ describe('PrismaFeatureFlagRepository', () => {
       await expect(repository.createFlag({ key: 'dup' })).rejects.toThrow(ConflictException);
     });
 
-    it('should throw BadRequestException for percentage < 0', async () => {
-      await expect(repository.createFlag({ key: 'x', percentage: -1 })).rejects.toThrow(BadRequestException);
-    });
+    it.each([null, -1, 101, 0.5, NaN, Infinity, -Infinity, '50', true])(
+      'should reject invalid percentage %p before calling Prisma',
+      async (percentage) => {
+        await expect(
+          repository.createFlag({ key: 'x', percentage: percentage as number }),
+        ).rejects.toThrow(BadRequestException);
+        expect(prisma.featureFlag.create).not.toHaveBeenCalled();
+      },
+    );
 
-    it('should throw BadRequestException for percentage > 100', async () => {
-      await expect(repository.createFlag({ key: 'x', percentage: 101 })).rejects.toThrow(BadRequestException);
+    it.each([0, 100])('should persist boundary percentage %p', async (percentage) => {
+      await repository.createFlag({ key: 'x', percentage });
+      expect(prisma.featureFlag.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ percentage }) }),
+      );
     });
   });
 
@@ -125,8 +134,32 @@ describe('PrismaFeatureFlagRepository', () => {
       await expect(repository.updateFlag('nope', { enabled: true })).rejects.toThrow(NotFoundException);
     });
 
-    it('should throw BadRequestException for invalid percentage', async () => {
-      await expect(repository.updateFlag('x', { percentage: 200 })).rejects.toThrow(BadRequestException);
+    it.each([null, -1, 101, 0.5, NaN, Infinity, -Infinity, '50', true])(
+      'should reject invalid percentage %p before calling Prisma',
+      async (percentage) => {
+        await expect(
+          repository.updateFlag('x', { percentage: percentage as number }),
+        ).rejects.toThrow(BadRequestException);
+        expect(prisma.featureFlag.update).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([0, 100])('should persist boundary percentage %p', async (percentage) => {
+      await repository.updateFlag('x', { percentage });
+      expect(prisma.featureFlag.update).toHaveBeenCalledWith({
+        where: { key: 'x' },
+        data: { percentage },
+        include: { overrides: true },
+      });
+    });
+
+    it('should allow clearing a description without changing an omitted percentage', async () => {
+      await repository.updateFlag('x', { description: null, percentage: undefined });
+      expect(prisma.featureFlag.update).toHaveBeenCalledWith({
+        where: { key: 'x' },
+        data: { description: null },
+        include: { overrides: true },
+      });
     });
   });
 

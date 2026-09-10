@@ -12,10 +12,11 @@ import { PrismaService } from './prisma.service';
       inject: [PrismaService],
       useFactory: (prisma: PrismaService) => ({
         prisma,
+        cacheTtlMs: 0, // Let local seed changes appear on the next request.
         environment: process.env.NODE_ENV ?? 'development',
         userIdExtractor: (req) => {
           const userId = req.headers['x-user-id'];
-          return Array.isArray(userId) ? userId[0] ?? null : userId ?? null;
+          return Array.isArray(userId) ? (userId[0] ?? null) : (userId ?? null);
         },
       }),
     }),

@@ -2,6 +2,23 @@
 
 All notable changes to `@nestarc/feature-flag` will be documented in this file.
 
+## [Unreleased]
+
+These changes are available in the repository checkout and have not been published as npm 0.5.0. Use a locally built package tarball to try them until a new version is released.
+
+### Fixed
+- Preserve explicit `targetingKey` during service context resolution.
+- Apply registry `bucketBy` to typed clients and bulk evaluation; add invocation-level `bucketBy` selection.
+- Accept custom `repository` and `tenantContextProvider` instances in synchronous and asynchronous module registration; Prisma is required only when no repository is supplied.
+- Reject null and non-integer percentages before Prisma and align nullable description/context types with runtime behavior.
+- Provide and test an OpenFeature SDK-compatible provider with boolean resolution and explicit unsupported-type errors.
+
+### Documentation and verification
+- Add a complete consumer guide, runnable standalone examples, and checks against a packed package in CI.
+- Correct cache consistency, dependency, evaluation, and performance descriptions; link the existing 0.5 upgrade notes.
+- Isolate benchmark data in a disposable schema and support environment metadata and raw timing output.
+- Include the consumer guide and changelog in package files and connect npm metadata to the official documentation.
+
 ## [0.5.0] — 2026-08-02
 
 ### Changed

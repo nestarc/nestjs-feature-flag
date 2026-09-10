@@ -1,9 +1,13 @@
 import { createOpenFeatureBooleanProvider } from '../src/openfeature';
 import { FeatureFlagService } from '../src/services/feature-flag.service';
 
+jest.mock('@openfeature/server-sdk', () => {
+  throw new Error('The adapter must not load the optional SDK at runtime');
+});
+
 describe('OpenFeature boolean provider adapter', () => {
   it('should expose provider metadata', () => {
-    const service = {} as FeatureFlagService;
+    const service = { evaluateBoolean: jest.fn() };
     const provider = createOpenFeatureBooleanProvider(service, {
       name: '@nestarc/feature-flag-test',
     });
@@ -22,7 +26,7 @@ describe('OpenFeature boolean provider adapter', () => {
         defaultUsed: false,
         evaluationTimeMs: 1,
       }),
-    } as unknown as FeatureFlagService;
+    } satisfies Pick<FeatureFlagService, 'evaluateBoolean'>;
     const provider = createOpenFeatureBooleanProvider(service);
 
     const result = await provider.resolveBooleanEvaluation(
@@ -68,12 +72,14 @@ describe('OpenFeature boolean provider adapter', () => {
         defaultUsed: true,
         evaluationTimeMs: 1,
       }),
-    } as unknown as FeatureFlagService;
+    } satisfies Pick<FeatureFlagService, 'evaluateBoolean'>;
     const provider = createOpenFeatureBooleanProvider(service);
 
     await provider.resolveBooleanEvaluation('MY_FLAG', false, {
+      targetingKey: null,
       userId: null,
-      environment: 'production',
+      tenantId: null,
+      environment: null,
       plan: 'enterprise',
       nested: { unsupported: true },
       tags: ['unsupported'],
@@ -82,10 +88,40 @@ describe('OpenFeature boolean provider adapter', () => {
     expect(service.evaluateBoolean).toHaveBeenCalledWith(
       'MY_FLAG',
       expect.objectContaining({
+        targetingKey: null,
         userId: null,
-        environment: 'production',
+        tenantId: null,
+        environment: null,
         attributes: { plan: 'enterprise' },
       }),
+      { defaultValue: false },
+    );
+  });
+
+  it('should leave absent context dimensions undefined so the service can use ambient values', async () => {
+    const service = {
+      evaluateBoolean: jest.fn().mockResolvedValue({
+        flagKey: 'MY_FLAG',
+        value: true,
+        result: true,
+        reason: 'GLOBAL',
+        source: 'global',
+        defaultUsed: false,
+      }),
+    } satisfies Pick<FeatureFlagService, 'evaluateBoolean'>;
+    const provider = createOpenFeatureBooleanProvider(service);
+
+    await provider.resolveBooleanEvaluation('MY_FLAG', false, {});
+
+    expect(service.evaluateBoolean).toHaveBeenCalledWith(
+      'MY_FLAG',
+      {
+        targetingKey: undefined,
+        userId: undefined,
+        tenantId: undefined,
+        environment: undefined,
+        attributes: {},
+      },
       { defaultValue: false },
     );
   });
@@ -108,7 +144,7 @@ describe('OpenFeature boolean provider adapter', () => {
         defaultUsed: false,
         evaluationTimeMs: 1,
       }),
-    } as unknown as FeatureFlagService;
+    } satisfies Pick<FeatureFlagService, 'evaluateBoolean'>;
     const provider = createOpenFeatureBooleanProvider(service);
 
     const result = await provider.resolveBooleanEvaluation('MY_FLAG', false, {});
@@ -120,7 +156,7 @@ describe('OpenFeature boolean provider adapter', () => {
   it('should map service Error failures to OpenFeature error details', async () => {
     const service = {
       evaluateBoolean: jest.fn().mockRejectedValue(new TypeError('adapter failure')),
-    } as unknown as FeatureFlagService;
+    } satisfies Pick<FeatureFlagService, 'evaluateBoolean'>;
     const provider = createOpenFeatureBooleanProvider(service);
 
     const result = await provider.resolveBooleanEvaluation('MY_FLAG', true, {});
@@ -129,7 +165,7 @@ describe('OpenFeature boolean provider adapter', () => {
       expect.objectContaining({
         value: true,
         reason: 'ERROR',
-        errorCode: 'TypeError',
+        errorCode: 'GENERAL',
         errorMessage: 'adapter failure',
       }),
     );
@@ -138,6 +174,7 @@ describe('OpenFeature boolean provider adapter', () => {
         source: 'default',
         localReason: 'ERROR',
         defaultUsed: true,
+        localErrorCode: 'TypeError',
       }),
     );
   });
@@ -145,7 +182,7 @@ describe('OpenFeature boolean provider adapter', () => {
   it('should stringify non-Error service failures', async () => {
     const service = {
       evaluateBoolean: jest.fn().mockRejectedValue('adapter failure'),
-    } as unknown as FeatureFlagService;
+    } satisfies Pick<FeatureFlagService, 'evaluateBoolean'>;
     const provider = createOpenFeatureBooleanProvider(service);
 
     const result = await provider.resolveBooleanEvaluation('MY_FLAG', false, {});
@@ -154,13 +191,13 @@ describe('OpenFeature boolean provider adapter', () => {
       expect.objectContaining({
         value: false,
         reason: 'ERROR',
-        errorCode: 'Error',
+        errorCode: 'GENERAL',
         errorMessage: 'adapter failure',
       }),
     );
   });
 
-  it('should map missing flags to OpenFeature DEFAULT reason', async () => {
+  it('should map missing flags to the OpenFeature FLAG_NOT_FOUND error', async () => {
     const service = {
       evaluateBoolean: jest.fn().mockResolvedValue({
         flagKey: 'MISSING',
@@ -171,12 +208,59 @@ describe('OpenFeature boolean provider adapter', () => {
         defaultUsed: true,
         evaluationTimeMs: 1,
       }),
-    } as unknown as FeatureFlagService;
+    } satisfies Pick<FeatureFlagService, 'evaluateBoolean'>;
     const provider = createOpenFeatureBooleanProvider(service);
 
     const result = await provider.resolveBooleanEvaluation('MISSING', true, {});
 
     expect(result.value).toBe(true);
-    expect(result.reason).toBe('DEFAULT');
+    expect(result.reason).toBe('ERROR');
+    expect(result.errorCode).toBe('FLAG_NOT_FOUND');
+  });
+
+  it('should omit absent metadata values and preserve scalar values including zero', async () => {
+    const provider = createOpenFeatureBooleanProvider({
+      evaluateBoolean: async () => ({
+        flagKey: 'ROLLOUT',
+        value: true,
+        result: true,
+        reason: 'PERCENTAGE_MATCH',
+        source: 'percentage',
+        defaultUsed: false,
+        bucket: 0,
+        targetingKey: 'user-1',
+      }),
+    });
+
+    const result = await provider.resolveBooleanEvaluation('ROLLOUT', false, {});
+
+    expect(result.flagMetadata).toEqual({
+      source: 'percentage',
+      localReason: 'PERCENTAGE_MATCH',
+      defaultUsed: false,
+      bucket: 0,
+      targetingKey: 'user-1',
+    });
+  });
+
+  it('should expose the local service error separately from the standard SDK error code', async () => {
+    const provider = createOpenFeatureBooleanProvider({
+      evaluateBoolean: async () => ({
+        flagKey: 'BROKEN',
+        value: false,
+        result: false,
+        reason: 'ERROR',
+        source: 'default',
+        defaultUsed: true,
+        errorCode: 'PrismaClientKnownRequestError',
+        errorMessage: 'database unavailable',
+      }),
+    });
+
+    const result = await provider.resolveBooleanEvaluation('BROKEN', false, {});
+
+    expect(result.errorCode).toBe('GENERAL');
+    expect(result.errorMessage).toBe('database unavailable');
+    expect(result.flagMetadata.localErrorCode).toBe('PrismaClientKnownRequestError');
   });
 });

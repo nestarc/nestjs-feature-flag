@@ -163,6 +163,45 @@ describe('FeatureFlagAdmin REST (e2e)', () => {
     expect(res.body.enabled).toBe(true);
   });
 
+  it.each([null, -1, 101, 0.5, '50'])(
+    'PATCH /feature-flags/:key — should reject percentage %p without changing the flag',
+    async (percentage) => {
+      await request(app.getHttpServer())
+        .post('/feature-flags')
+        .send({ key: 'INVALID_UPDATE', percentage: 25 })
+        .expect(201);
+
+      const res = await request(app.getHttpServer())
+        .patch('/feature-flags/INVALID_UPDATE')
+        .send({ percentage });
+
+      expect(res.status).toBe(400);
+      const stored = await prisma.featureFlag.findUnique({ where: { key: 'INVALID_UPDATE' } });
+      expect(stored?.percentage).toBe(25);
+    },
+  );
+
+  it('PATCH /feature-flags/:key — should accept boundaries and preserve omitted percentage', async () => {
+    await request(app.getHttpServer())
+      .post('/feature-flags')
+      .send({ key: 'PERCENTAGE_BOUNDARIES', percentage: 100, description: 'clear me' })
+      .expect(201);
+
+    for (const percentage of [0, 100]) {
+      const res = await request(app.getHttpServer())
+        .patch('/feature-flags/PERCENTAGE_BOUNDARIES')
+        .send({ percentage });
+      expect(res.status).toBe(200);
+      expect(res.body.percentage).toBe(percentage);
+    }
+
+    const cleared = await request(app.getHttpServer())
+      .patch('/feature-flags/PERCENTAGE_BOUNDARIES')
+      .send({ description: null });
+    expect(cleared.status).toBe(200);
+    expect(cleared.body).toMatchObject({ description: null, percentage: 100 });
+  });
+
   // ── ARCHIVE ────────────────────────────────────
 
   it('DELETE /feature-flags/:key — should archive a flag', async () => {
@@ -227,6 +266,34 @@ describe('FeatureFlagAdmin REST (e2e)', () => {
 
     expect(res.status).toBe(404);
   });
+
+  it('POST /feature-flags/:key/evaluate — should bucket by a requested custom attribute', async () => {
+    await request(app.getHttpServer())
+      .post('/feature-flags')
+      .send({ key: 'ACCOUNT_ROLLOUT', percentage: 50, metadata: { bucketBy: 'userId' } })
+      .expect(201);
+
+    const res = await request(app.getHttpServer())
+      .post('/feature-flags/ACCOUNT_ROLLOUT/evaluate')
+      .send({
+        context: { userId: 'user-1', attributes: { accountId: 'account-1' } },
+        bucketBy: 'accountId',
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ source: 'percentage', targetingKey: 'account-1' });
+    expect(res.body.bucket).toEqual(expect.any(Number));
+  });
+
+  it.each([null, '', 123])(
+    'POST /feature-flags/:key/evaluate — should reject invalid bucketBy %p',
+    async (bucketBy) => {
+      await request(app.getHttpServer())
+        .post('/feature-flags/ACCOUNT_ROLLOUT/evaluate')
+        .send({ bucketBy })
+        .expect(400);
+    },
+  );
 
   // ── Full CRUD cycle ────────────────────────────
 

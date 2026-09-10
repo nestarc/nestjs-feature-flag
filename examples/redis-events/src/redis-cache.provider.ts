@@ -4,8 +4,12 @@ import { Redis } from 'ioredis';
 
 @Injectable()
 export class RedisCacheProvider implements OnModuleDestroy {
-  private readonly client = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379');
-  readonly adapter = new RedisCacheAdapter({ client: this.client });
+  private readonly client = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6399');
+  readonly adapter = new RedisCacheAdapter({
+    client: this.client,
+    keyPrefix: process.env.EXAMPLE_REDIS_PREFIX ?? 'feature-flag-example:',
+    channel: process.env.EXAMPLE_REDIS_CHANNEL ?? 'feature-flag-example:invalidate',
+  });
 
   async onModuleDestroy(): Promise<void> {
     await this.client.quit();

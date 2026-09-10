@@ -102,6 +102,10 @@ function mergeRegistryOptions(
     defaultValue: definition.defaultValue,
   };
 
+  if (definition.bucketBy !== undefined) {
+    merged.bucketBy = definition.bucketBy;
+  }
+
   if (definition.trackExposure !== undefined) {
     merged.trackExposure = definition.trackExposure;
   }

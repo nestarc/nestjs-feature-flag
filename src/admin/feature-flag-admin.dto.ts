@@ -7,9 +7,10 @@ import {
   IsString,
   Max,
   Min,
+  ValidateIf,
 } from 'class-validator';
 import { EvaluationContext } from '../interfaces/evaluation-context.interface';
-import { EvaluateBooleanOptions } from '../interfaces/evaluation-details.interface';
+import { BucketBy, EvaluateBooleanOptions } from '../interfaces/evaluation-details.interface';
 import { TargetingAttributes } from '../interfaces/feature-flag.interface';
 import { IsTargetingAttributes } from './targeting-attributes.validator';
 
@@ -20,19 +21,19 @@ export class CreateFeatureFlagDto {
 
   @IsOptional()
   @IsString()
-  description?: string;
+  description?: string | null;
 
-  @IsOptional()
+  @ValidateIf((_object, value) => value !== undefined)
   @IsBoolean()
   enabled?: boolean;
 
-  @IsOptional()
+  @ValidateIf((_object, value) => value !== undefined)
   @IsInt()
   @Min(0)
   @Max(100)
   percentage?: number;
 
-  @IsOptional()
+  @ValidateIf((_object, value) => value !== undefined)
   @IsObject()
   metadata?: Record<string, unknown>;
 }
@@ -40,19 +41,19 @@ export class CreateFeatureFlagDto {
 export class UpdateFeatureFlagDto {
   @IsOptional()
   @IsString()
-  description?: string;
+  description?: string | null;
 
-  @IsOptional()
+  @ValidateIf((_object, value) => value !== undefined)
   @IsBoolean()
   enabled?: boolean;
 
-  @IsOptional()
+  @ValidateIf((_object, value) => value !== undefined)
   @IsInt()
   @Min(0)
   @Max(100)
   percentage?: number;
 
-  @IsOptional()
+  @ValidateIf((_object, value) => value !== undefined)
   @IsObject()
   metadata?: Record<string, unknown>;
 }
@@ -64,7 +65,7 @@ export class SetOverrideDto {
   @IsBoolean()
   enabled!: boolean;
 
-  @IsOptional()
+  @ValidateIf((_object, value) => value !== undefined)
   @IsInt()
   priority?: number;
 }
@@ -75,19 +76,24 @@ export class RemoveOverrideDto {
 }
 
 export class EvaluateFeatureFlagDto implements EvaluateBooleanOptions {
-  @IsOptional()
+  @ValidateIf((_object, value) => value !== undefined)
   @IsObject()
   context?: EvaluationContext;
 
-  @IsOptional()
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsString()
+  @IsNotEmpty()
+  bucketBy?: BucketBy;
+
+  @ValidateIf((_object, value) => value !== undefined)
   @IsBoolean()
   defaultValue?: boolean;
 
-  @IsOptional()
+  @ValidateIf((_object, value) => value !== undefined)
   @IsBoolean()
   trackExposure?: boolean;
 
-  @IsOptional()
+  @ValidateIf((_object, value) => value !== undefined)
   @IsBoolean()
   includeContextInEvent?: boolean;
 }
