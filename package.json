@@ -1,6 +1,6 @@
 {
   "name": "@nestarc/feature-flag",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "NestJS feature flags with Prisma and PostgreSQL: attribute targeting, percentage rollouts, and optional Redis caching. No external flag service required.",
   "homepage": "https://nestarc.dev/packages/feature-flag/",
   "bugs": {

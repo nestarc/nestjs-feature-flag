@@ -12,7 +12,7 @@ npm run build
 npm pack
 npm run docker:up
 cd examples/multi-tenant-targeting
-npm install ../../nestarc-feature-flag-0.5.0.tgz
+npm install ../../nestarc-feature-flag-0.6.0.tgz
 export DATABASE_URL='postgresql://test:test@localhost:5499/feature_flag_test'
 npm run prisma:generate
 npm run db:migrate
@@ -46,7 +46,7 @@ Caching is disabled here so repeat seeding is immediately visible. `npm run seed
 
 ## Standalone files and verification
 
-Copy this entire directory elsewhere and run `npm install` to consume the published package version, then continue from the database environment command. To test this checkout's changes, install its packed archive as above. Local Prisma configuration reads `prisma/schema.prisma` and `prisma/migrations`; the generated client lives inside `src/generated/prisma` and is included in `npm run build`. No root repository imports or Nest CLI are needed.
+After 0.6.0 is published, copy this entire directory elsewhere and run `npm install` to consume the declared package version, then continue from the database environment command. Until publication, install the packed 0.6.0 archive as above. Local Prisma configuration reads `prisma/schema.prisma` and `prisma/migrations`; the generated client lives inside `src/generated/prisma` and is included in `npm run build`. No root repository imports or Nest CLI are needed.
 
 The copied migrations include database constraints not represented completely by the Prisma schema. Run `db:migrate` instead of substituting `prisma db push`.
 

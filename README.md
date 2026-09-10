@@ -7,7 +7,7 @@
 
 `@nestarc/feature-flag` stores feature flags in your PostgreSQL database and evaluates them inside your NestJS application. Use route guards, exact attribute targeting, and deterministic percentage rollouts without a separate feature flag service. NestJS, Prisma, and other [peer dependencies](#installation-and-compatibility) are required.
 
-**Version scope:** these repository docs describe the current, **unreleased checkout**. The package version is still `0.5.0`; the targeting-key and registry fixes, custom module provider options, and SDK-compatible OpenFeature provider described here are not included in the existing npm `0.5.0` release. Use a package built from this checkout to try them. See the [unreleased changes and upgrade notes](CHANGELOG.md), and consult the [0.5.0 source](https://github.com/nestarc/nestjs-feature-flag/tree/v0.5.0) when working on that release.
+**Version scope:** these repository docs describe **0.6.0 (pending publication)**. It includes targeting-key and registry fixes, custom module provider options, and an SDK-compatible OpenFeature provider that are absent from npm `0.5.0`. Until 0.6.0 is published, install a package built from this checkout. See the [0.6.0 changes and upgrade notes](CHANGELOG.md), and consult the [0.5.0 source](https://github.com/nestarc/nestjs-feature-flag/tree/v0.5.0) when working on that release.
 
 ## Contents
 
@@ -23,15 +23,15 @@
 
 ## Installation and compatibility
 
-For an existing NestJS application using the published release:
+After 0.6.0 is published, install it in an existing NestJS application:
 
 ```bash
-npm install @nestarc/feature-flag@0.5.0
+npm install @nestarc/feature-flag@0.6.0
 npm install @prisma/client@^7 @prisma/adapter-pg@^7 pg class-transformer@^0.5.1 class-validator@^0.15.0
 npm install --save-dev prisma@^7
 ```
 
-Keep the Prisma CLI, client, and PostgreSQL adapter on matching versions. The installation above obtains the released package; it does not include the unreleased fixes noted above. The runnable examples explain how to install a locally packed checkout instead.
+Keep the Prisma CLI, client, and PostgreSQL adapter on matching versions. Before publication, follow the quickstart below to install a locally packed 0.6.0 checkout instead.
 
 | Requirement | Supported range / purpose |
 | --- | --- |
@@ -54,7 +54,7 @@ npm run build
 npm pack
 npm run docker:up
 cd examples/basic-guard
-npm install ../../nestarc-feature-flag-0.5.0.tgz
+npm install ../../nestarc-feature-flag-0.6.0.tgz
 export DATABASE_URL='postgresql://test:test@localhost:5499/feature_flag_test'
 npm run prisma:generate
 npm run db:migrate
@@ -63,7 +63,7 @@ npm run seed -- on
 npm start
 ```
 
-The tarball contains the local checkout even though its version is still `0.5.0`. The database URL above is for the repository's development Compose service; substitute your own empty development database if needed. In another terminal:
+The tarball contains the local 0.6.0 checkout and is available before npm publication. The database URL above is for the repository's development Compose service; substitute your own empty development database if needed. In another terminal:
 
 ```bash
 curl -i http://127.0.0.1:3000/dashboard
@@ -164,7 +164,7 @@ Evaluation checks **archived status → matching override → percentage rollout
 
 For a gradual rollout, use `enabled: false` and a percentage between 1 and 99. To make an active flag false for everyone, set `enabled: false`, set `percentage: 0`, and remove any enabling overrides. Archiving also makes evaluation false, and removes the flag from active listings.
 
-A non-empty `targetingKey` takes precedence for bucketing. Otherwise the evaluator uses the selected `bucketBy` attribute, then falls back to `userId ?? tenantId`. The [reference](docs/usage.md#percentage-bucketing) defines configuration precedence and missing-attribute behavior. Explicit `targetingKey` handling and consistent registry bucketing are fixed in this unreleased checkout.
+A non-empty `targetingKey` takes precedence for bucketing. Otherwise the evaluator uses the selected `bucketBy` attribute, then falls back to `userId ?? tenantId`. The [reference](docs/usage.md#percentage-bucketing) defines configuration precedence and missing-attribute behavior. Explicit `targetingKey` handling and consistent registry bucketing are fixed in 0.6.0.
 
 ## Target users and tenants
 
@@ -207,7 +207,7 @@ The default cache is in memory with a 30,000 ms TTL. Set `cacheTtlMs: 0` to disa
 
 - [Redis and cache lifecycle](docs/usage.md#caching): adapter setup, invalidation, and connection ownership.
 - [Events](docs/usage.md#events): import `EventEmitterModule.forRoot()` **and** set `emitEvents: true`; exposure tracking also needs an opt-in setting.
-- [Custom persistence and tenancy](docs/usage.md#custom-persistence-and-tenancy): use module options and Nest factories; these options are unreleased.
+- [Custom persistence and tenancy](docs/usage.md#custom-persistence-and-tenancy): use module options and Nest factories; these options are new in 0.6.0.
 - [OpenFeature](docs/usage.md#openfeature): boolean evaluation through the optional SDK integration; no string, numeric, or object flag values.
 - [Testing utilities](docs/usage.md#testing): `/testing` provides controlled boolean stubs; targeting behavior should be tested with the actual evaluator.
 
@@ -222,7 +222,7 @@ The default cache is in memory with a 30,000 ms TTL. Set `cacheTtlMs: 0` to disa
 
 ## For AI agents
 
-Check the installed package version and its `.d.ts` exports first, then use [docs/usage.md](docs/usage.md) for consumer implementation. It identifies the unreleased APIs, prerequisites, context/default semantics, and executable examples. The guide and changelog are included in the package so installed-package workflows can read them without relying on search results. Use the documented `/testing` and `/openfeature` entry points instead of importing internal `dist` paths.
+Check the installed package version and its `.d.ts` exports first, then use [docs/usage.md](docs/usage.md) for consumer implementation. It identifies the 0.6.0 APIs, publication status, prerequisites, context/default semantics, and executable examples. The guide and changelog are included in the package so installed-package workflows can read them without relying on search results. Use the documented `/testing` and `/openfeature` entry points instead of importing internal `dist` paths.
 
 For changes to this repository, follow [AGENTS.md](https://github.com/nestarc/nestjs-feature-flag/blob/main/AGENTS.md). Historical design documents are not the current API contract.
 

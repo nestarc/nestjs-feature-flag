@@ -2,7 +2,7 @@
 
 This guide is for application developers and AI agents consuming the package. Start with the [README quickstart](../README.md#quickstart) for a complete running app.
 
-**Version scope:** this guide describes the unreleased checkout that follows the published `0.5.0`. A local tarball still has version `0.5.0`; use the [changelog](../CHANGELOG.md) to distinguish it from the existing npm release. New `repository` / `tenantContextProvider` module options, invocation `bucketBy`, explicit targeting-key propagation, consistent registry bucketing, Admin null-percentage validation, and full OpenFeature SDK registration are unreleased. Do not assume `npm install @nestarc/feature-flag@0.5.0` includes them. For a published release, inspect that version's declarations and [tagged source](https://github.com/nestarc/nestjs-feature-flag/tree/v0.5.0).
+**Version scope:** this guide describes **0.6.0 (pending publication)**. It adds `repository` / `tenantContextProvider` module options, invocation `bucketBy`, explicit targeting-key propagation, consistent registry bucketing, Admin null-percentage validation, and full OpenFeature SDK registration. These changes are absent from npm `0.5.0`; use the locally packed 0.6.0 checkout until publication. See the [changelog](../CHANGELOG.md) for version boundaries. When using 0.5.0, inspect its declarations and [tagged source](https://github.com/nestarc/nestjs-feature-flag/tree/v0.5.0).
 
 ## Contents
 
@@ -27,15 +27,15 @@ This guide is for application developers and AI agents consuming the package. St
 
 Use Node.js `^20.19.0 || ^22.12.0 || >=24.0.0` with NestJS 10/11 and Prisma 7. The default repository needs PostgreSQL and a Prisma client with `featureFlag` and `featureFlagOverride` models. Required package peers are listed in `package.json`; `@prisma/adapter-pg`, `pg`, the Prisma CLI, and `dotenv` below are application setup dependencies.
 
-In an existing Nest application, install matching versions of Prisma CLI, client, and adapter:
+After 0.6.0 is published, install it in an existing Nest application with matching versions of Prisma CLI, client, and adapter:
 
 ```bash
-npm install @nestarc/feature-flag@0.5.0
+npm install @nestarc/feature-flag@0.6.0
 npm install @prisma/client@^7 @prisma/adapter-pg@^7 pg dotenv class-transformer@^0.5.1 class-validator@^0.15.0
 npm install --save-dev prisma@^7
 ```
 
-That command installs the published release. For the unreleased features in this guide, build this repository with `npm ci` and `npm run build`, run `npm pack`, then install the resulting `nestarc-feature-flag-0.5.0.tgz` in your app. The [standalone examples](https://github.com/nestarc/nestjs-feature-flag/tree/main/examples) document this path.
+Before publication, build this repository with `npm ci` and `npm run build`, run `npm pack`, then install the resulting `nestarc-feature-flag-0.6.0.tgz` in your app with `npm install /path/to/nestarc-feature-flag-0.6.0.tgz`. The [standalone examples](https://github.com/nestarc/nestjs-feature-flag/tree/main/examples) document this path.
 
 For a new development database with no existing Prisma migrations:
 
@@ -160,8 +160,8 @@ Register `FeatureFlagModule` once in the application; it exports `FeatureFlagSer
 | `emitEvents` | `false` | Enables publishing when Nest's event emitter is configured |
 | `cacheAdapter` | `MemoryCacheAdapter` | Cache implementation |
 | `flags` | None | Registry defaults, bucket selection, and exposure settings |
-| `repository` | Prisma repository | Custom repository instance; unreleased |
-| `tenantContextProvider` | Default tenant provider | Custom ambient tenant resolver instance; unreleased |
+| `repository` | Prisma repository | Custom repository instance; added in 0.6.0 |
+| `tenantContextProvider` | Default tenant provider | Custom ambient tenant resolver instance; added in 0.6.0 |
 
 ### Asynchronous factories and reusable option providers
 
@@ -274,7 +274,7 @@ For individual evaluation the selected default is the first defined value:
 3. Module `defaultOnMissing`.
 4. `false`.
 
-Defaults do not override a stored flag's normal result. Registry-only flags are absent from `evaluateAll()`. Bulk evaluation applies the module registry's `bucketBy` in the unreleased checkout, but it has no invocation options or per-key fallback on failure.
+Defaults do not override a stored flag's normal result. Registry-only flags are absent from `evaluateAll()`. Bulk evaluation applies the module registry's `bucketBy` in 0.6.0, but it has no invocation options or per-key fallback on failure.
 
 ## Context and targeting
 
@@ -300,7 +300,7 @@ When more than one override matches, order is: more attributes, higher `priority
 
 Percentage must be an integer from 0 through 100. A percentage of 100 returns true after override handling without requiring a bucket key. A percentage of 0 uses global `enabled`. Between 1 and 99, a usable key produces `murmurhash3(flag.key + targetingKey) % 100`; the flag is true if the result is below `percentage`. This is a deterministic distribution, not a guarantee that exactly that fraction of a small population is enabled.
 
-Key selection in the unreleased checkout is:
+Key selection in 0.6.0 is:
 
 1. Non-empty explicit `context.targetingKey`.
 2. Read the attribute named by the chosen `bucketBy`: invocation option, then module registry, then flag `metadata.bucketBy`.
@@ -311,7 +311,7 @@ A typed client passes its own registry `bucketBy` as an invocation option; expli
 When no usable key remains, the result is global `enabled` with `PERCENTAGE_NO_TARGETING_KEY`. Use a stable, non-empty key for consistent allocation. Changing the key, chosen bucket attribute, or flag key can change allocation.
 
 ```typescript
-// Invocation bucketBy is unreleased; `flags` is an injected FeatureFlagService.
+// Invocation bucketBy is new in 0.6.0; `flags` is an injected FeatureFlagService.
 await flags.evaluateBoolean(
   'NEW_CHECKOUT',
   { tenantId: 'tenant-acme', userId: 'user-123' },
@@ -342,7 +342,7 @@ const client = createFeatureFlagClient(service, flagDefinitions);
 const enabled = await client.isEnabled('NEW_CHECKOUT', { tenantId: 'tenant-acme' });
 ```
 
-Pass `flags: flagDefinitions` alongside `environment` and persistence options at module registration to apply registry settings to direct service calls. The typed client's own registry is local to that client and does not register module-wide settings or affect separate `evaluateAll()` calls. Registry bucket propagation in the typed client and bulk evaluation is fixed in the unreleased checkout.
+Pass `flags: flagDefinitions` alongside `environment` and persistence options at module registration to apply registry settings to direct service calls. The typed client's own registry is local to that client and does not register module-wide settings or affect separate `evaluateAll()` calls. Registry bucket propagation in the typed client and bulk evaluation is fixed in 0.6.0.
 
 `defineFlags()` retains typed keys; it does not seed or synchronize database records. Lifecycle metadata (`owner`, `type`, `tags`, `staleAt`, `expiresAt`) is descriptive. `getFlagLifecycleStatus()` calculates active/stale/expired status; it does not archive records, prevent evaluation, or schedule cleanup. `createFeatureFlagDecorators(registry)` constrains keys and supplies registry defaults to decorators; use the module registry for guard bucketing/exposure defaults.
 
@@ -433,7 +433,7 @@ Import `FlagAdminModule` into the root app alongside its feature flag registrati
 | `POST /feature-flags/:key/overrides` | `attributes`, `enabled`, optional `priority` | 201, empty body | 400 invalid attributes/body; 404 missing flag |
 | `DELETE /feature-flags/:key/overrides` | `attributes` | 200, empty body | 400 invalid attributes/body; 404 missing flag |
 
-These are Nest's default success status codes; override endpoints do not return a flag object or 204. Authentication errors depend on the supplied guard. Infrastructure errors may still return 500. The evaluation endpoint shares the service's event behavior, so `trackExposure: true` can emit an event without a database mutation. The unreleased `bucketBy` option also works through this endpoint and must be a non-empty string; null, empty, and non-string values return 400.
+These are Nest's default success status codes; override endpoints do not return a flag object or 204. Authentication errors depend on the supplied guard. Infrastructure errors may still return 500. The evaluation endpoint shares the service's event behavior, so `trackExposure: true` can emit an event without a database mutation. The `bucketBy` option added in 0.6.0 also works through this endpoint and must be a non-empty string; null, empty, and non-string values return 400.
 
 Create request:
 
@@ -484,7 +484,7 @@ Content-Type: application/json
 
 The example timing is illustrative. `defaultValue: true` does not replace a stored false result. A missing key produces `value: true`, `source: "default"`, `reason: "FLAG_NOT_FOUND"`, and `defaultUsed: true` with this request.
 
-Percentages must be integers 0–100. The unreleased validation fix rejects explicit `null` as well as strings, fractions, and out-of-range values with 400; omission uses the create default or leaves an update unchanged. Legacy override bodies such as `{"tenantId":"tenant-acme","enabled":true}` are rejected: use `{"attributes":{"tenantId":"tenant-acme"},"enabled":true}`. Evaluation `context` is checked as an object, not deeply validated as a nested DTO; follow the [context contract](#context-and-targeting).
+Percentages must be integers 0–100. The 0.6.0 validation fix rejects explicit `null` as well as strings, fractions, and out-of-range values with 400; omission uses the create default or leaves an update unchanged. Legacy override bodies such as `{"tenantId":"tenant-acme","enabled":true}` are rejected: use `{"attributes":{"tenantId":"tenant-acme"},"enabled":true}`. Evaluation `context` is checked as an object, not deeply validated as a nested DTO; follow the [context contract](#context-and-targeting).
 
 ## Caching
 
@@ -579,7 +579,7 @@ Event listeners decide sampling, persistence, and analytics. Lifecycle and expos
 
 ## Custom persistence and tenancy
 
-**Unreleased:** pass implementation instances through module options. A custom repository removes the need for a Prisma instance at module initialization; if both are supplied, `repository` takes precedence. Omitting both throws a configuration error. This does not change npm's declared peer dependencies. Your application owns custom instance lifecycle: Nest manages injected providers in their declaring module; initialize and close manually constructed instances yourself. Exported repository/tenant tokens expose interface delegates, so do not rely on identity with your supplied object.
+**Added in 0.6.0:** pass implementation instances through module options. A custom repository removes the need for a Prisma instance at module initialization; if both are supplied, `repository` takes precedence. Omitting both throws a configuration error. This does not change npm's declared peer dependencies. Your application owns custom instance lifecycle: Nest manages injected providers in their declaring module; initialize and close manually constructed instances yourself. Exported repository/tenant tokens expose interface delegates, so do not rely on identity with your supplied object.
 
 For implementations already constructed by your app:
 
@@ -629,7 +629,7 @@ Do not attempt to replace these internal providers by placing an identical token
 
 ## OpenFeature
 
-**Unreleased SDK integration:** install `@openfeature/server-sdk@^1.23.0` and register the provider through the SDK. The adapter has no SDK runtime import, but its public TypeScript provider declaration references SDK types, so install the optional SDK when using this entry point.
+**SDK integration in 0.6.0:** install `@openfeature/server-sdk@^1.23.0` and register the provider through the SDK. The adapter has no SDK runtime import, but its public TypeScript provider declaration references SDK types, so install the optional SDK when using this entry point.
 
 ```typescript
 import { OpenFeature } from '@openfeature/server-sdk';
@@ -660,7 +660,7 @@ The SDK's invocation default is forwarded to individual service evaluation. Know
 | Missing flag | `ERROR`, `FLAG_NOT_FOUND`, caller default |
 | Evaluation failure | `ERROR`, `GENERAL`, caller default |
 
-The existing npm 0.5.0 adapter is not the SDK-compatible provider described here. Use the unreleased packed checkout or a later release explicitly containing this change. For exposure event controls, use the library's evaluation API or module registry.
+The existing npm 0.5.0 adapter is not the SDK-compatible provider described here. Use the packed 0.6.0 checkout until that version is published. For exposure event controls, use the library's evaluation API or module registry.
 
 ## Testing
 
@@ -690,6 +690,8 @@ The stub does not evaluate context, percentage rollouts, override precedence, or
 
 ## Upgrades and troubleshooting
 
+For 0.5.0 → 0.6.0, no Prisma schema migration is required. Review the [0.6.0 migration notes](../CHANGELOG.md) for custom provider registration and OpenFeature SDK types. Corrected `targetingKey` and registry `bucketBy` handling can change existing partial-rollout assignments when those settings were previously ignored.
+
 For 0.5.0, follow the [changelog's migration notes](../CHANGELOG.md): Prisma 7 needs `@prisma/adapter-pg`, a generated-client output import, and the URL in `prisma.config.ts`. This upgrade does not require a feature-flag database migration.
 
 For 0.2 → 0.3, the SQL migration moves legacy `tenant_id`, `user_id`, and `environment` into override `attributes`. It deletes rows whose legacy columns are all null. Rows that collide after conversion are deduplicated by latest `updated_at`, then latest `created_at`, then highest ID. Review that data transformation before deploying it. Replace legacy override request fields with a non-empty `attributes` object. Later runtime fixes do not undo this migration's data transformations.
@@ -700,16 +702,16 @@ For 0.2 → 0.3, the SQL migration moves legacy `tenant_id`, `user_id`, and `env
 | `useExisting` cannot resolve the options factory | Import a module that provides and exports that factory class |
 | An event listener receives nothing | Install the event package, import `EventEmitterModule.forRoot()`, register the listener, and set `emitEvents: true`; exposure also requires opt-in |
 | A false flag still enables a route | Check matching overrides and nonzero percentage before global `enabled` |
-| Percentage rollout does not use a supplied targeting key | Check installed version; explicit propagation is fixed after published 0.5.0 |
+| Percentage rollout does not use a supplied targeting key | Check installed version; explicit propagation is fixed in 0.6.0 |
 | A seeded change is not visible | Direct DB changes do not invalidate library caches; await manual invalidation or wait for TTL |
 | A tenant override fails without the tenancy package | Supply top-level `tenantId` explicitly; no tenancy dependency is needed for explicit context |
-| A custom provider in `AppModule.providers` is ignored | Use unreleased module options with imported/injected implementations |
+| A custom provider in `AppModule.providers` is ignored | Use the 0.6.0 module options with imported/injected implementations |
 | `evaluateAll()` omits a registry key | Bulk results contain active database flags only; seed the record explicitly |
 | Prisma client import is missing | Generate the client and match its configured output path; 0.5 uses Prisma 7's generated import |
 
 ## Agent implementation checklist
 
-1. Inspect the installed `package.json`, changelog, and public `.d.ts` files. Distinguish released 0.5.0 from a packed checkout with unreleased fixes.
+1. Inspect the installed `package.json`, changelog, and public `.d.ts` files. Distinguish released 0.5.0 from 0.6.0, which is pending publication and available as a packed checkout.
 2. Use `@nestarc/feature-flag`, `@nestarc/feature-flag/testing`, and `@nestarc/feature-flag/openfeature`. Avoid private `dist/*` or repository `src/*` imports.
 3. Choose the complete basic example or the registration recipe above. Supply database schema/migrations, a generated Prisma client, exported Nest dependencies, environment values, and a seeded flag.
 4. Use top-level user/tenant/environment context, explicit stable bucket identity, and an appropriate missing/error default. Do not treat registry declarations as database creation.

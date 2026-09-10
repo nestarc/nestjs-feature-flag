@@ -12,7 +12,7 @@ npm run build
 npm pack
 npm run docker:up
 cd examples/basic-guard
-npm install ../../nestarc-feature-flag-0.5.0.tgz
+npm install ../../nestarc-feature-flag-0.6.0.tgz
 export DATABASE_URL='postgresql://test:test@localhost:5499/feature_flag_test'
 npm run prisma:generate
 npm run db:migrate
@@ -40,7 +40,7 @@ curl -i http://127.0.0.1:3000/dashboard
 
 ## Copy into another project
 
-This directory is self-contained. Copy it anywhere, run `npm install` to use the declared published package version, and continue from `export DATABASE_URL` above. Use the packed archive instead when verifying changes from this checkout. There are no imports or Prisma paths pointing outside this directory, and the Nest CLI is not required.
+This directory is self-contained. After 0.6.0 is published, copy it anywhere, run `npm install` to use the declared package version, and continue from `export DATABASE_URL` above. Until publication, install the packed 0.6.0 archive as shown above. There are no imports or Prisma paths pointing outside this directory, and the Nest CLI is not required.
 
 The local `prisma/schema.prisma` generates TypeScript into `src/generated/prisma`; `npm run build` compiles the app and generated client into `dist`. `prisma/migrations` copies the package's migrations, including the JSONB uniqueness index and non-empty attributes constraint. Use `db:migrate`, rather than `prisma db push`, to preserve those database constraints.
 

@@ -2,14 +2,17 @@
 
 All notable changes to `@nestarc/feature-flag` will be documented in this file.
 
-## [Unreleased]
+## [0.6.0] — Unreleased
 
-These changes are available in the repository checkout and have not been published as npm 0.5.0. Use a locally built package tarball to try them until a new version is released.
+Version 0.6.0 is prepared in this checkout and is pending npm publication. These changes are not included in the published 0.5.0. Use a locally built 0.6.0 package tarball until publication.
+
+### Added
+- Accept custom `repository` and `tenantContextProvider` instances in synchronous and asynchronous module registration; Prisma is required only when no repository is supplied.
+- Add invocation-level `bucketBy` selection, including the Admin evaluation endpoint.
 
 ### Fixed
 - Preserve explicit `targetingKey` during service context resolution.
-- Apply registry `bucketBy` to typed clients and bulk evaluation; add invocation-level `bucketBy` selection.
-- Accept custom `repository` and `tenantContextProvider` instances in synchronous and asynchronous module registration; Prisma is required only when no repository is supplied.
+- Apply registry `bucketBy` to typed clients and bulk evaluation.
 - Reject null and non-integer percentages before Prisma and align nullable description/context types with runtime behavior.
 - Provide and test an OpenFeature SDK-compatible provider with boolean resolution and explicit unsupported-type errors.
 
@@ -18,6 +21,12 @@ These changes are available in the repository checkout and have not been publish
 - Correct cache consistency, dependency, evaluation, and performance descriptions; link the existing 0.5 upgrade notes.
 - Isolate benchmark data in a disposable schema and support environment metadata and raw timing output.
 - Include the consumer guide and changelog in package files and connect npm metadata to the official documentation.
+
+### Migration
+- No Prisma schema migration is required from 0.5.0.
+- Use the new module options for custom repositories and tenant providers; tokens declared only in an importing module do not replace this module's providers.
+- Install `@openfeature/server-sdk@^1.23.0` when consuming the `/openfeature` entry point's public TypeScript types.
+- Review partial-rollout cohorts if you previously supplied `targetingKey` or registry `bucketBy`: these values are now applied consistently, so existing evaluation results can change.
 
 ## [0.5.0] — 2026-08-02
 
