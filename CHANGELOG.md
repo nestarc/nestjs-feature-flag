@@ -2,6 +2,12 @@
 
 All notable changes to `@nestarc/feature-flag` will be documented in this file.
 
+## [Unreleased]
+
+### Documentation and maintenance
+- Keep `docs/` as local, untracked documentation and planning notes.
+- Move the published consumer guide to `USAGE.md`, preserving packaged documentation and executable recipe verification.
+
 ## [0.6.0] — 2026-09-10
 
 Version 0.6.0 adds module provider options and corrects evaluation and SDK integration behavior from 0.5.0.

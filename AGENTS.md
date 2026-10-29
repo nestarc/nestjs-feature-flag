@@ -1,13 +1,13 @@
 # Repository instructions
 
-This repository builds `@nestarc/feature-flag`, a NestJS library. Consumer applications should start with `README.md`, `docs/usage.md`, and `examples/`; this file describes how to modify the library.
+This repository builds `@nestarc/feature-flag`, a NestJS library. Consumer applications should start with `README.md`, `USAGE.md`, and `examples/`; this file describes how to modify the library.
 
 ## Sources and version boundaries
 
 - `src/index.ts`, `src/testing/index.ts`, and `src/openfeature.ts` define the public package entry points. Preserve public behavior unless a change explicitly requires otherwise.
 - Read `package.json` and `CHANGELOG.md` before adding versioned guidance. A local fix is unreleased until a versioned release includes it; do not claim it is available in an existing npm version.
 - `prisma/schema.prisma` and `prisma/migrations/` define the default PostgreSQL storage contract. Some constraints exist only in SQL migrations. Keep example schemas and migrations aligned when storage changes.
-- `docs/README.md` distinguishes current usage from historical plans and reports. Historical descriptions are not the current API contract.
+- `docs/` is ignored by Git and reserved for optional local notes, historical plans, and reports. Do not depend on its contents in builds, checks, or published packages. Historical descriptions are not the current API contract.
 
 ## Implementation and documentation
 
@@ -15,7 +15,7 @@ This repository builds `@nestarc/feature-flag`, a NestJS library. Consumer appli
 - Use the module's `repository` and `tenantContextProvider` options for custom providers. Test Nest module registration with real `Test.createTestingModule()` dependency resolution when changing DI.
 - Document individual versus bulk evaluation behavior and optional integration requirements accurately. `emitEvents`, exposure tracking, and event context inclusion are separate settings.
 - Await cache APIs. Mutation invalidation is best effort; avoid claims of immediate cross-instance consistency or universally optimal TTL.
-- Put consumer detail in `docs/usage.md` and runnable examples. Keep README concise and link to those sources. Update relevant public type comments and the changelog when behavior changes.
+- Put consumer detail in `USAGE.md` and runnable examples. Keep README concise and link to those sources. Update relevant public type comments and the changelog when behavior changes.
 - A Markdown fence preceded by `&lt;!-- source: path/to/file.ts --&gt;` must exactly match that source file. Run documentation verification after changing either side.
 - Full TypeScript recipes marked with `typecheck: recipe.ts` are extracted from the consumer guide and compiled by `scripts/verify-doc-snippets.mjs`; keep marked blocks complete and their shared imports resolvable.
 - Keep examples independent of repository-generated imports: install the packed package, generate their own Prisma clients, and use their documented local schema/migrations. Include seed inputs and expected HTTP results for changed flows.

@@ -9,6 +9,9 @@ examples/*/.env
 /tmp
 /generated/prisma
 
+# Local documentation and planning notes
+/docs/
+
 # Logs
 logs
 *.log

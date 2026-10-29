@@ -16,7 +16,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const guidePath = join(root, 'docs/usage.md');
+const guidePath = join(root, 'USAGE.md');
 const guide = readFileSync(guidePath, 'utf8');
 const expectedRecipes = [
   'main.ts',

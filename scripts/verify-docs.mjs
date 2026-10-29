@@ -9,8 +9,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const examples = ['basic-guard', 'multi-tenant-targeting', 'redis-events'];
 const documents = [
   'README.md',
-  'docs/usage.md',
-  'docs/README.md',
+  'USAGE.md',
   'AGENTS.md',
   'benchmarks/README.md',
   ...examples.map((name) => `examples/${name}/README.md`),
@@ -119,10 +118,14 @@ check('npm consumer documentation and exports', () => {
     'pack', '--dry-run', '--ignore-scripts', '--json', '--cache', join(tmpdir(), 'feature-flag-docs-npm-cache'),
   ], { cwd: root, encoding: 'utf8', maxBuffer: 5 * 1024 * 1024 }));
   const files = new Set(pack.files.map((file) => file.path));
-  for (const required of ['README.md', 'docs/usage.md', 'CHANGELOG.md', 'prisma/schema.prisma']) {
+  for (const required of ['README.md', 'USAGE.md', 'CHANGELOG.md', 'prisma/schema.prisma']) {
     assert(files.has(required), `missing from npm package: ${required}`);
   }
-  for (const document of ['README.md', 'docs/usage.md']) {
+  assert(
+    ![...files].some((file) => file.startsWith('docs/')),
+    'local docs must not be included in the npm package',
+  );
+  for (const document of ['README.md', 'USAGE.md']) {
     const prose = readFileSync(join(root, document), 'utf8').replace(/```[\s\S]*?```/g, '');
     for (const match of prose.matchAll(/\[[^\]]*\]\(([^)]+)\)/g)) {
       const target = match[1].replace(/^<|>$/g, '').split(/\s+"/)[0];

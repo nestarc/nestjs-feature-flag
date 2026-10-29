@@ -1,8 +1,8 @@
 # @nestarc/feature-flag consumer guide
 
-This guide is for application developers and AI agents consuming the package. Start with the [README quickstart](../README.md#quickstart) for a complete running app.
+This guide is for application developers and AI agents consuming the package. Start with the [README quickstart](README.md#quickstart) for a complete running app.
 
-**Version scope:** this guide describes **0.6.0**. It adds `repository` / `tenantContextProvider` module options, invocation `bucketBy`, explicit targeting-key propagation, consistent registry bucketing, Admin null-percentage validation, and full OpenFeature SDK registration. These changes are absent from `0.5.0`. See the [changelog](../CHANGELOG.md) for version boundaries. When using 0.5.0, inspect its declarations and [tagged source](https://github.com/nestarc/nestjs-feature-flag/tree/v0.5.0).
+**Version scope:** this guide describes **0.6.0**. It adds `repository` / `tenantContextProvider` module options, invocation `bucketBy`, explicit targeting-key propagation, consistent registry bucketing, Admin null-percentage validation, and full OpenFeature SDK registration. These changes are absent from `0.5.0`. See the [changelog](CHANGELOG.md) for version boundaries. When using 0.5.0, inspect its declarations and [tagged source](https://github.com/nestarc/nestjs-feature-flag/tree/v0.5.0).
 
 ## Contents
 
@@ -265,7 +265,7 @@ const details = await flags.evaluateBoolean(
 console.log(details.value, details.source, details.reason);
 ```
 
-Evaluation follows archived status, matching override, percentage, then global `enabled`. See the [README decision table](../README.md#how-a-flag-resolves). An archived flag returns false with `ARCHIVED`, not a fallback. A missing flag uses `FLAG_NOT_FOUND`; a caught evaluation failure uses `ERROR`.
+Evaluation follows archived status, matching override, percentage, then global `enabled`. See the [README decision table](README.md#how-a-flag-resolves). An archived flag returns false with `ARCHIVED`, not a fallback. A missing flag uses `FLAG_NOT_FOUND`; a caught evaluation failure uses `ERROR`.
 
 For individual evaluation the selected default is the first defined value:
 
@@ -690,9 +690,9 @@ The stub does not evaluate context, percentage rollouts, override precedence, or
 
 ## Upgrades and troubleshooting
 
-For 0.5.0 → 0.6.0, no Prisma schema migration is required. Review the [0.6.0 migration notes](../CHANGELOG.md) for custom provider registration and OpenFeature SDK types. Corrected `targetingKey` and registry `bucketBy` handling can change existing partial-rollout assignments when those settings were previously ignored.
+For 0.5.0 → 0.6.0, no Prisma schema migration is required. Review the [0.6.0 migration notes](CHANGELOG.md) for custom provider registration and OpenFeature SDK types. Corrected `targetingKey` and registry `bucketBy` handling can change existing partial-rollout assignments when those settings were previously ignored.
 
-For 0.5.0, follow the [changelog's migration notes](../CHANGELOG.md): Prisma 7 needs `@prisma/adapter-pg`, a generated-client output import, and the URL in `prisma.config.ts`. This upgrade does not require a feature-flag database migration.
+For 0.5.0, follow the [changelog's migration notes](CHANGELOG.md): Prisma 7 needs `@prisma/adapter-pg`, a generated-client output import, and the URL in `prisma.config.ts`. This upgrade does not require a feature-flag database migration.
 
 For 0.2 → 0.3, the SQL migration moves legacy `tenant_id`, `user_id`, and `environment` into override `attributes`. It deletes rows whose legacy columns are all null. Rows that collide after conversion are deduplicated by latest `updated_at`, then latest `created_at`, then highest ID. Review that data transformation before deploying it. Replace legacy override request fields with a non-empty `attributes` object. Later runtime fixes do not undo this migration's data transformations.
 

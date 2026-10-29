@@ -42,7 +42,7 @@ Keep the Prisma CLI, client, and PostgreSQL adapter on matching versions. The qu
 | Other required peers | `class-transformer` 0.5, `class-validator` 0.14/0.15, `rxjs` 7, `reflect-metadata` 0.1/0.2 |
 | Optional integrations | `ioredis` 5 for Redis; `@nestjs/event-emitter` for events; `@openfeature/server-sdk` ^1.23.0 for OpenFeature |
 
-A standard Nest application already supplies NestJS, RxJS, reflection support, and an HTTP platform adapter. The [consumer guide](docs/usage.md#database-setup) contains the Prisma schema, SQL constraints, and generated-client setup.
+A standard Nest application already supplies NestJS, RxJS, reflection support, and an HTTP platform adapter. The [consumer guide](USAGE.md#database-setup) contains the Prisma schema, SQL constraints, and generated-client setup.
 
 ## Quickstart
 
@@ -109,7 +109,7 @@ export class AppModule {}
 
 The imported [PrismaModule](https://github.com/nestarc/nestjs-feature-flag/blob/main/examples/basic-guard/src/prisma.module.ts), [PrismaService](https://github.com/nestarc/nestjs-feature-flag/blob/main/examples/basic-guard/src/prisma.service.ts), and [DashboardController](https://github.com/nestarc/nestjs-feature-flag/blob/main/examples/basic-guard/src/dashboard.controller.ts) are included in the example. `PrismaModule` exports `PrismaService`; including that module in `forRootAsync.imports` makes the service available to the factory. Events are disabled in this basic configuration.
 
-For an existing app, follow the [database setup and complete synchronous registration recipe](docs/usage.md#database-setup), or reuse the example's Prisma module with `forRootAsync`.
+For an existing app, follow the [database setup and complete synchronous registration recipe](USAGE.md#database-setup), or reuse the example's Prisma module with `forRootAsync`.
 
 ## Evaluate a flag
 
@@ -146,7 +146,7 @@ export class CheckoutService {
 }
 ```
 
-Use `evaluateBoolean()` for the value and explanation (`source`, `reason`, `defaultUsed`, and optional bucket details). `evaluateAll()` returns the values of active, stored flags; it does not create entries for registry-only keys, emit evaluation/exposure events, or convert errors to defaults. See the [evaluation reference](docs/usage.md#evaluation-and-defaults).
+Use `evaluateBoolean()` for the value and explanation (`source`, `reason`, `defaultUsed`, and optional bucket details). `evaluateAll()` returns the values of active, stored flags; it does not create entries for registry-only keys, emit evaluation/exposure events, or convert errors to defaults. See the [evaluation reference](USAGE.md#evaluation-and-defaults).
 
 ## How a flag resolves
 
@@ -164,7 +164,7 @@ Evaluation checks **archived status → matching override → percentage rollout
 
 For a gradual rollout, use `enabled: false` and a percentage between 1 and 99. To make an active flag false for everyone, set `enabled: false`, set `percentage: 0`, and remove any enabling overrides. Archiving also makes evaluation false, and removes the flag from active listings.
 
-A non-empty `targetingKey` takes precedence for bucketing. Otherwise the evaluator uses the selected `bucketBy` attribute, then falls back to `userId ?? tenantId`. The [reference](docs/usage.md#percentage-bucketing) defines configuration precedence and missing-attribute behavior. Explicit `targetingKey` handling and consistent registry bucketing are fixed in 0.6.0.
+A non-empty `targetingKey` takes precedence for bucketing. Otherwise the evaluator uses the selected `bucketBy` attribute, then falls back to `userId ?? tenantId`. The [reference](USAGE.md#percentage-bucketing) defines configuration precedence and missing-attribute behavior. Explicit `targetingKey` handling and consistent registry bucketing are fixed in 0.6.0.
 
 ## Target users and tenants
 
@@ -186,7 +186,7 @@ const enabled = await flags.isEnabled('NEW_CHECKOUT', {
 
 If several overrides match, the winner has more attributes, then higher priority, then earlier creation time, then the lower ID. Top-level `userId`, `tenantId`, and `environment` become targeting attributes and take precedence over same-named entries in `attributes`. Explicit `null` suppresses the corresponding ambient value; it remains a `null` targeting attribute. A provided `tenantId` works without a tenancy package.
 
-The [registry guide](docs/usage.md#typed-registry) covers typed keys and defaults. Registry entries describe evaluation behavior; they do not create database flags or automatically archive expired flags.
+The [registry guide](USAGE.md#typed-registry) covers typed keys and defaults. Registry entries describe evaluation behavior; they do not create database flags or automatically archive expired flags.
 
 ## Manage flags
 
@@ -199,30 +199,29 @@ await flags.archive('OLD_CHECKOUT');
 await flags.invalidateCache();
 ```
 
-The optional [Admin REST API](docs/usage.md#admin-rest-api) exposes creation, updates, active listings, evaluation, and overrides. Registration requires an application-supplied authentication/authorization guard. Request bodies, response examples, status codes, and errors are documented in the guide.
+The optional [Admin REST API](USAGE.md#admin-rest-api) exposes creation, updates, active listings, evaluation, and overrides. Registration requires an application-supplied authentication/authorization guard. Request bodies, response examples, status codes, and errors are documented in the guide.
 
 ## Caching, events, and integrations
 
 The default cache is in memory with a 30,000 ms TTL. Set `cacheTtlMs: 0` to disable writes to the cache, or use Redis for shared storage and Pub/Sub invalidation across instances. Mutation invalidation is best effort: a database write can succeed while cache invalidation fails. TTL expiry limits how long an existing stale entry remains; concurrent reads and failures mean this is not an immediate-consistency guarantee. Choose TTL based on your acceptable staleness and measured workload.
 
-- [Redis and cache lifecycle](docs/usage.md#caching): adapter setup, invalidation, and connection ownership.
-- [Events](docs/usage.md#events): import `EventEmitterModule.forRoot()` **and** set `emitEvents: true`; exposure tracking also needs an opt-in setting.
-- [Custom persistence and tenancy](docs/usage.md#custom-persistence-and-tenancy): use module options and Nest factories; these options are new in 0.6.0.
-- [OpenFeature](docs/usage.md#openfeature): boolean evaluation through the optional SDK integration; no string, numeric, or object flag values.
-- [Testing utilities](docs/usage.md#testing): `/testing` provides controlled boolean stubs; targeting behavior should be tested with the actual evaluator.
+- [Redis and cache lifecycle](USAGE.md#caching): adapter setup, invalidation, and connection ownership.
+- [Events](USAGE.md#events): import `EventEmitterModule.forRoot()` **and** set `emitEvents: true`; exposure tracking also needs an opt-in setting.
+- [Custom persistence and tenancy](USAGE.md#custom-persistence-and-tenancy): use module options and Nest factories; these options are new in 0.6.0.
+- [OpenFeature](USAGE.md#openfeature): boolean evaluation through the optional SDK integration; no string, numeric, or object flag values.
+- [Testing utilities](USAGE.md#testing): `/testing` provides controlled boolean stubs; targeting behavior should be tested with the actual evaluator.
 
 ## Documentation and examples
 
-- [Consumer guide](docs/usage.md): schema, complete registration, API semantics, integrations, and troubleshooting.
+- [Consumer guide](USAGE.md): schema, complete registration, API semantics, integrations, and troubleshooting.
 - [Basic route guard](https://github.com/nestarc/nestjs-feature-flag/blob/main/examples/basic-guard/README.md), [tenant and plan targeting](https://github.com/nestarc/nestjs-feature-flag/blob/main/examples/multi-tenant-targeting/README.md), and [Redis with events](https://github.com/nestarc/nestjs-feature-flag/blob/main/examples/redis-events/README.md): runnable applications with seed data and expected HTTP results.
 - [Changelog and 0.5 upgrade notes](CHANGELOG.md): Prisma 7 adapter, generated import path, and configuration changes.
 - [Benchmark method](https://github.com/nestarc/nestjs-feature-flag/blob/main/benchmarks/README.md): reproducible commands and measurement limits; latency depends on your workload and environment.
-- [Documentation index](https://github.com/nestarc/nestjs-feature-flag/blob/main/docs/README.md): current guides versus historical designs and validation reports.
 - [Website](https://nestarc.dev/packages/feature-flag/) and [issue tracker](https://github.com/nestarc/nestjs-feature-flag/issues).
 
 ## For AI agents
 
-Check the installed package version and its `.d.ts` exports first, then use [docs/usage.md](docs/usage.md) for consumer implementation. It identifies the 0.6.0 APIs, version boundaries, prerequisites, context/default semantics, and executable examples. The guide and changelog are included in the package so installed-package workflows can read them without relying on search results. Use the documented `/testing` and `/openfeature` entry points instead of importing internal `dist` paths.
+Check the installed package version and its `.d.ts` exports first, then use [USAGE.md](USAGE.md) for consumer implementation. It identifies the 0.6.0 APIs, version boundaries, prerequisites, context/default semantics, and executable examples. This checkout packages the guide as `USAGE.md` alongside the changelog. The guide location is an unreleased change; packages built before it use `docs/usage.md`. Use the documented `/testing` and `/openfeature` entry points instead of importing internal `dist` paths.
 
 For changes to this repository, follow [AGENTS.md](https://github.com/nestarc/nestjs-feature-flag/blob/main/AGENTS.md). Historical design documents are not the current API contract.
 

@@ -25,7 +25,7 @@
   "files": [
     "dist",
     "prisma",
-    "docs/usage*.md",
+    "USAGE.md",
     "CHANGELOG.md"
   ],
   "scripts": {
